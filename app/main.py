@@ -11,13 +11,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_sensor_log.csv"
 templates = Jinja2Templates(directory=PROJECT_ROOT / "app" / "templates")
 
-app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), name="static")
-
 app = FastAPI(
     title="Autodriving Sensor Log QA Dashboard",
     description="Sensor quality and driving event analysis dashboard",
     version="0.1.0",
 )
+
+app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), name="static")
 
 
 @app.get("/")
