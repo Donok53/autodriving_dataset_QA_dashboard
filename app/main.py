@@ -57,6 +57,10 @@ def _configure_logging() -> None:
 _configure_logging()
 
 
+def _env_flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _cleanup_abandoned_upload_files()
@@ -158,6 +162,19 @@ async def upload_log(request: Request, file: UploadFile = File(...)):
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/debug/runtime-error")
+def trigger_runtime_error_for_issue_test(request: Request):
+    if not _env_flag("ENABLE_ERROR_TEST_ENDPOINT"):
+        raise HTTPException(status_code=404, detail="테스트 오류 엔드포인트가 비활성화되어 있습니다.")
+
+    expected_token = os.getenv("ERROR_TEST_TOKEN", "").strip()
+    provided_token = request.headers.get("x-error-test-token", "").strip()
+    if not expected_token or provided_token != expected_token:
+        raise HTTPException(status_code=403, detail="테스트 오류 토큰이 올바르지 않습니다.")
+
+    raise RuntimeError("intentional runtime error for auto issue test")
 
 
 @app.get("/api/sample-analysis")

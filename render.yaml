@@ -28,3 +28,5 @@ services:
         value: "3600"
       - key: AUTO_ISSUE_MAX_PER_RUNTIME
         value: "5"
+      - key: ENABLE_ERROR_TEST_ENDPOINT
+        value: "false"

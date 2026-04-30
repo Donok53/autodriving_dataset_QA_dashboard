@@ -130,6 +130,23 @@ AUTO_ISSUE_MAX_PER_RUNTIME=5
 
 자동 이슈에는 오류 타입, Render 서비스명, 배포 commit, job/request context, traceback이 포함됩니다. 업로드 파일명과 임시 파일 경로는 공개 issue에 노출되지 않도록 제외하거나 축약합니다.
 
+자동 이슈 생성을 실제로 확인하고 싶다면 임시 테스트 엔드포인트를 켭니다.
+
+```text
+ENABLE_ERROR_TEST_ENDPOINT=true
+ERROR_TEST_TOKEN=임의의-긴-테스트-토큰
+```
+
+배포 후 아래 요청을 보내면 의도적으로 RuntimeError가 발생하고, 자동 issue 생성이 켜져 있으면 GitHub issue가 생성됩니다.
+
+```bash
+curl -i \
+  -H "X-Error-Test-Token: 임의의-긴-테스트-토큰" \
+  https://서비스이름.onrender.com/api/debug/runtime-error
+```
+
+확인이 끝나면 `ENABLE_ERROR_TEST_ENDPOINT=false`로 되돌립니다.
+
 ## 분석 항목
 
 파일 업로드 시 브라우저에서 업로드 진행률을 표시하고, 서버 분석은 인메모리 job 상태를 통해 검사 진행률을 표시합니다. 분석이 끝나면 완료된 job 결과 페이지로 이동합니다.

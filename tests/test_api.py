@@ -16,6 +16,55 @@ def test_health_check_returns_ok():
     assert response.json() == {"status": "ok"}
 
 
+def test_runtime_error_test_endpoint_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("ENABLE_ERROR_TEST_ENDPOINT", raising=False)
+
+    response = client.get("/api/debug/runtime-error")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "테스트 오류 엔드포인트가 비활성화되어 있습니다."
+
+
+def test_runtime_error_test_endpoint_requires_token(monkeypatch):
+    monkeypatch.setenv("ENABLE_ERROR_TEST_ENDPOINT", "true")
+    monkeypatch.setenv("ERROR_TEST_TOKEN", "secret-test-token")
+
+    response = client.get("/api/debug/runtime-error", headers={"x-error-test-token": "wrong-token"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "테스트 오류 토큰이 올바르지 않습니다."
+
+
+def test_runtime_error_test_endpoint_reports_issue(monkeypatch):
+    monkeypatch.setenv("ENABLE_ERROR_TEST_ENDPOINT", "true")
+    monkeypatch.setenv("ERROR_TEST_TOKEN", "secret-test-token")
+
+    captured = {}
+    monkeypatch.setattr(
+        main_module,
+        "report_unexpected_error",
+        lambda exc, context: captured.update({"exc": exc, "context": context}) or None,
+    )
+
+    error_client = TestClient(main_module.app, raise_server_exceptions=False)
+    response = error_client.get(
+        "/api/debug/runtime-error",
+        headers={
+            "x-error-test-token": "secret-test-token",
+            "rndr-id": "test-request-id",
+        },
+    )
+
+    assert response.status_code == 500
+    assert isinstance(captured["exc"], RuntimeError)
+    assert captured["context"] == {
+        "request_id": "test-request-id",
+        "method": "GET",
+        "path": "/api/debug/runtime-error",
+        "stage": "request",
+    }
+
+
 def test_sample_analysis_api_returns_summary():
     response = client.get("/api/sample-analysis")
 
