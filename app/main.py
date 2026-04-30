@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 from io import BytesIO
 import os
 import tempfile
@@ -39,10 +40,18 @@ _upload_reservation_lock = Lock()
 _upload_reservations: dict[str, int] = {}
 templates = Jinja2Templates(directory=PROJECT_ROOT / "app" / "templates")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _cleanup_abandoned_upload_files()
+    yield
+
+
 app = FastAPI(
     title="Autodriving Sensor Log QA Dashboard",
     description="Sensor quality and driving event analysis dashboard",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), name="static")
@@ -275,6 +284,15 @@ def _create_upload_temp_file(suffix: str):
         dir=UPLOAD_TEMP_DIR,
         delete=False,
     )
+
+
+def _cleanup_abandoned_upload_files() -> None:
+    if not UPLOAD_TEMP_DIR.exists():
+        return
+
+    for temp_path in UPLOAD_TEMP_DIR.glob("sensor-qa-upload-*"):
+        if temp_path.is_file():
+            temp_path.unlink(missing_ok=True)
 
 
 async def _write_upload_to_temp_file(

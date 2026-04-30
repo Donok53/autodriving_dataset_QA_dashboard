@@ -203,6 +203,19 @@ def test_interrupted_upload_cleans_temp_file_and_marks_job_failed(tmp_path, monk
     assert main_module._upload_reservations == {}
 
 
+def test_startup_cleanup_removes_abandoned_upload_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "UPLOAD_TEMP_DIR", tmp_path)
+    abandoned_file = tmp_path / "sensor-qa-upload-old.bag"
+    unrelated_file = tmp_path / "keep-me.bag"
+    abandoned_file.write_bytes(b"stale")
+    unrelated_file.write_bytes(b"keep")
+
+    main_module._cleanup_abandoned_upload_files()
+
+    assert not abandoned_file.exists()
+    assert unrelated_file.exists()
+
+
 def test_raw_upload_rejects_when_active_storage_pool_is_full(monkeypatch):
     with main_module._upload_reservation_lock:
         main_module._upload_reservations.clear()
