@@ -469,7 +469,7 @@ def _intervals_ms(timestamps_ns: list[int]) -> list[float]:
     return [
         (current - previous) / 1_000_000
         for previous, current in zip(timestamps, timestamps[1:])
-        if current >= previous
+        if current > previous
     ]
 
 
