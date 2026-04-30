@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Autodriving Sensor QA</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <script src="{{ url_for('static', path='/pagination.js') }}" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -58,7 +59,7 @@
       {% endif %}
 
       {% if summary.topic_profiles %}
-      <section class="panel">
+      <section class="panel" data-paginated data-page-size="10">
         <div class="section-title">
           <h2>Bag 토픽 요약</h2>
         </div>
@@ -77,7 +78,7 @@
             </thead>
             <tbody>
               {% for topic in summary.topic_profiles %}
-              <tr>
+              <tr data-page-item>
                 <td>{{ topic.topic }}</td>
                 <td>{{ topic.sensor }}</td>
                 <td>{{ topic.msgtype }}</td>
@@ -90,6 +91,7 @@
             </tbody>
           </table>
         </div>
+        <div class="pagination-controls" data-pagination-controls hidden></div>
       </section>
       {% endif %}
 
@@ -144,14 +146,14 @@
           </div>
         </div>
 
-        <div>
+        <div data-paginated data-page-size="5">
           <div class="section-title">
             <h2>주행 이벤트</h2>
           </div>
           <div class="event-list">
             {% for event in summary.events %}
             {% set status_class = 'warn' if event.severity == '주의' else 'bad' %}
-            <article class="event-item">
+            <article class="event-item" data-page-item>
               <div>
                 <strong>{{ event.event_type }}</strong>
                 <span>{{ event.timestamp }}</span>
@@ -163,10 +165,11 @@
             <p class="empty">탐지된 이벤트가 없습니다.</p>
             {% endfor %}
           </div>
+          <div class="pagination-controls" data-pagination-controls hidden></div>
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" data-paginated data-page-size="10">
         <div class="section-title">
           <h2>이상 구간</h2>
         </div>
@@ -184,7 +187,7 @@
             <tbody>
               {% for anomaly in summary.anomalies %}
               {% set status_class = 'warn' if anomaly.severity == '주의' else 'bad' %}
-              <tr>
+              <tr data-page-item>
                 <td>{{ anomaly.category }}</td>
                 <td>{{ anomaly.start }}</td>
                 <td>{{ anomaly.end }}</td>
@@ -199,6 +202,7 @@
             </tbody>
           </table>
         </div>
+        <div class="pagination-controls" data-pagination-controls hidden></div>
       </section>
     </main>
   </body>
