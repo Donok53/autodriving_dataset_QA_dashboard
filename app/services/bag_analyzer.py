@@ -18,7 +18,8 @@ from app.models import (
     SensorSyncStatus,
 )
 
-EXPECTED_SENSORS = ("camera", "lidar", "imu", "gps", "vehicle_motion")
+EXPECTED_SENSORS = ("lidar", "imu", "camera", "gps", "vehicle_motion")
+SENSOR_SORT_ORDER = {sensor: index for index, sensor in enumerate((*EXPECTED_SENSORS, "other"))}
 MAX_BAG_MESSAGES = 500_000
 MAX_EVENT_COUNT = 30
 
@@ -101,7 +102,7 @@ def read_bag(path: Path, max_messages: int = MAX_BAG_MESSAGES) -> BagReadResult:
                 break
 
         return BagReadResult(
-            topic_series=sorted(topic_by_name.values(), key=lambda series: series.topic),
+            topic_series=sorted(topic_by_name.values(), key=_topic_series_sort_key),
             total_message_count=int(reader.message_count),
             processed_message_count=processed_count,
             start_time_ns=int(reader.start_time),
@@ -147,6 +148,10 @@ def infer_sensor_category(topic: str, msgtype: str) -> str:
     if _is_vehicle_motion_topic(topic, msgtype):
         return "vehicle_motion"
     return "other"
+
+
+def _topic_series_sort_key(series: BagTopicSeries) -> tuple[int, str]:
+    return (SENSOR_SORT_ORDER.get(series.sensor, SENSOR_SORT_ORDER["other"]), series.topic)
 
 
 def _is_vehicle_motion_topic(topic: str, msgtype: str) -> bool:

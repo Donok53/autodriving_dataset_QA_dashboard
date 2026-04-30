@@ -79,6 +79,19 @@ def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
     assert payload["source_type"] == "bag"
     assert payload["total_rows"] == 27
     assert len(payload["topic_profiles"]) == 4
+    assert [profile["sensor"] for profile in payload["topic_profiles"]] == [
+        "lidar",
+        "imu",
+        "gps",
+        "vehicle_motion",
+    ]
+    assert [status["sensor"] for status in payload["sync_statuses"]] == [
+        "lidar",
+        "imu",
+        "camera",
+        "gps",
+        "vehicle_motion",
+    ]
     assert any(anomaly["category"] == "topic_gap" for anomaly in payload["anomalies"])
     assert any("camera" in anomaly["description"] for anomaly in payload["anomalies"])
     assert any(status["sensor"] == "camera" and status["status"] == "위험" for status in payload["sync_statuses"])
