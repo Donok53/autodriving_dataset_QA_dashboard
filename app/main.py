@@ -1,4 +1,11 @@
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+
+from app.services.analyzer import InvalidSensorLogError, analyze_csv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_sensor_log.csv"
 
 app = FastAPI(
     title="Autodriving Sensor Log QA Dashboard",
@@ -18,3 +25,11 @@ def read_root() -> dict[str, str]:
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/sample-analysis")
+def sample_analysis() -> dict[str, object]:
+    try:
+        return analyze_csv(SAMPLE_DATA_PATH).to_dict()
+    except InvalidSensorLogError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
