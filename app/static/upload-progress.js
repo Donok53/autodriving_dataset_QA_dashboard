@@ -6,6 +6,8 @@ const analysisProgressBar = document.querySelector("#analysis-progress-bar");
 const analysisProgressText = document.querySelector("#analysis-progress-text");
 const progressError = document.querySelector("#progress-error");
 const submitButton = uploadForm?.querySelector("button[type='submit']");
+const maxUploadBytes = 10 * 1024 * 1024 * 1024;
+const maxUploadLabel = "10GB";
 
 function setProgress(bar, text, percent, label) {
   const clampedPercent = Math.max(0, Math.min(Math.round(percent), 100));
@@ -56,12 +58,18 @@ function uploadWithProgress(form) {
   const fileInput = form.querySelector("input[type='file']");
   const file = fileInput?.files?.[0];
 
+  resetProgressPanel();
+
   if (!file) {
     setProgressError("업로드할 파일을 선택해주세요.");
     return;
   }
 
-  resetProgressPanel();
+  if (file.size > maxUploadBytes) {
+    setProgressError(`파일은 ${maxUploadLabel} 이하만 업로드할 수 있습니다.`);
+    return;
+  }
+
   if (submitButton) {
     submitButton.disabled = true;
   }

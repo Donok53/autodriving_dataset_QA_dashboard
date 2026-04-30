@@ -16,6 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_sensor_log.csv"
 SUPPORTED_UPLOAD_SUFFIXES = {".csv", ".bag"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024
+MAX_UPLOAD_SIZE_LABEL = "10GB"
 templates = Jinja2Templates(directory=PROJECT_ROOT / "app" / "templates")
 
 app = FastAPI(
@@ -25,6 +27,10 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), name="static")
+
+
+class UploadTooLargeError(ValueError):
+    pass
 
 
 @app.get("/")
@@ -126,6 +132,7 @@ async def create_raw_analysis_job(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> JSONResponse:
+    _validate_content_length(request.headers.get("content-length"))
     filename, suffix = _validate_upload_filename(_filename_from_header(request))
 
     job = create_job(filename, suffix.removeprefix("."))
@@ -179,6 +186,23 @@ def _validate_upload_filename(filename: str | None) -> tuple[str, str]:
     return clean_filename, suffix
 
 
+def _validate_content_length(raw_content_length: str | None) -> None:
+    if raw_content_length is None:
+        return
+
+    try:
+        content_length = int(raw_content_length)
+    except ValueError:
+        return
+
+    if content_length > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=_upload_too_large_message())
+
+
+def _upload_too_large_message() -> str:
+    return f"파일은 {MAX_UPLOAD_SIZE_LABEL} 이하만 업로드할 수 있습니다."
+
+
 async def _write_upload_to_temp_file(file: UploadFile, suffix: str, job_id: str) -> Path:
     async def read_next_chunk() -> bytes:
         return await file.read(UPLOAD_CHUNK_SIZE)
@@ -207,9 +231,22 @@ async def _write_chunks_to_temp_file(read_next_chunk, suffix: str, job_id: str) 
             temp_path = Path(temp_file.name)
             update_job(job_id, status="pending", progress=3, stage="파일 저장 중")
             while chunk := await read_next_chunk():
+                if total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
+                    raise UploadTooLargeError
                 total_bytes += len(chunk)
                 temp_file.write(chunk)
 
+    except UploadTooLargeError as exc:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        update_job(
+            job_id,
+            status="failed",
+            progress=100,
+            stage="업로드 실패",
+            error=_upload_too_large_message(),
+        )
+        raise HTTPException(status_code=413, detail=_upload_too_large_message()) from exc
     except OSError as exc:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

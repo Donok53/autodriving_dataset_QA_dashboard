@@ -1,8 +1,10 @@
+import importlib
+
 from fastapi.testclient import TestClient
 
-from app.main import app
+main_module = importlib.import_module("app.main")
 
-client = TestClient(app)
+client = TestClient(main_module.app)
 
 
 def test_health_check_returns_ok():
@@ -31,7 +33,7 @@ def test_dashboard_renders_html():
     assert "CSV/BAG 업로드" in response.text
     assert "전체 이벤트" in response.text
     assert "pagination.js" in response.text
-    assert "upload-progress.js?v=2" in response.text
+    assert "upload-progress.js?v=3" in response.text
     assert "analysis-progress-panel" in response.text
     assert 'data-page-size="5"' in response.text
     assert 'data-page-size="10"' in response.text
@@ -98,6 +100,23 @@ def test_raw_csv_upload_job_completes_and_renders_result():
     result_response = client.get(f"/jobs/{job['job_id']}")
     assert result_response.status_code == 200
     assert "sample_sensor_log.csv" in result_response.text
+
+
+def test_raw_upload_rejects_file_over_size_limit(monkeypatch):
+    monkeypatch.setattr(main_module, "MAX_UPLOAD_BYTES", 5)
+    monkeypatch.setattr(main_module, "MAX_UPLOAD_SIZE_LABEL", "5B")
+
+    response = client.post(
+        "/api/upload/raw",
+        content=b"123456",
+        headers={
+            "content-type": "application/octet-stream",
+            "x-filename": "too-large.bag",
+        },
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "파일은 5B 이하만 업로드할 수 있습니다."
 
 
 def test_async_upload_rejects_unsupported_file_type():
