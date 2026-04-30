@@ -19,6 +19,14 @@
     </header>
 
     <main class="layout">
+      <section class="upload-panel">
+        <form action="/upload" method="post" enctype="multipart/form-data">
+          <label for="file">CSV 업로드</label>
+          <input id="file" name="file" type="file" accept=".csv" required>
+          <button type="submit">분석</button>
+        </form>
+      </section>
+
       <section class="summary-strip" aria-label="summary">
         <article class="stat-card">
           <span>데이터</span>

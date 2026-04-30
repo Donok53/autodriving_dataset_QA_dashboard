@@ -82,6 +82,49 @@ h1 {
   margin: 24px auto 48px;
 }
 
+.upload-panel {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.upload-panel form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.upload-panel label {
+  color: #344054;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.upload-panel input[type="file"] {
+  min-width: 240px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.upload-panel button {
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--blue);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.upload-panel button:hover {
+  background: #1d4ed8;
+}
+
 .summary-strip,
 .metric-grid,
 .two-column {
