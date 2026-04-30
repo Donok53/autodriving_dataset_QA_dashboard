@@ -33,3 +33,23 @@ def check_missing_values(frame: pd.DataFrame) -> QualityMetric:
         value=missing_ratio,
         detail=f"{total_cells}개 셀 중 {missing_count}개 결측",
     )
+
+
+def check_duplicate_timestamps(frame: pd.DataFrame) -> QualityMetric:
+    if "timestamp" not in frame.columns or frame.empty:
+        return QualityMetric(
+            name="timestamp 중복",
+            status="위험",
+            value=100.0,
+            detail="timestamp 컬럼 또는 행이 없습니다.",
+        )
+
+    duplicated_count = int(frame["timestamp"].duplicated(keep=False).sum())
+    duplicated_ratio = round((duplicated_count / len(frame)) * 100, 2)
+
+    return QualityMetric(
+        name="timestamp 중복",
+        status=status_from_ratio(duplicated_ratio, warning=1.0, critical=5.0),
+        value=duplicated_ratio,
+        detail=f"{len(frame)}개 행 중 {duplicated_count}개 timestamp 중복",
+    )
