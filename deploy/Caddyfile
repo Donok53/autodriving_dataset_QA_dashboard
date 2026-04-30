@@ -1,0 +1,4 @@
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy autodriving-sensor-qa-local-server:8000
+}

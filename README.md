@@ -71,6 +71,25 @@ UPLOAD_HOST_DIR=/media/byeongjae/HDD00/autodriving_sensor_qa_uploads \
 ./scripts/run_local_server.sh
 ```
 
+## HTTPS 로컬 서버 운영
+
+공개 도메인을 가지고 있거나 DuckDNS 같은 동적 DNS를 사용할 수 있다면 Caddy reverse proxy로 HTTPS를 붙일 수 있습니다.
+
+```bash
+export PATH=/home/byeongjae/bin:$PATH
+export DOCKER_HOST=unix:///run/user/1000/docker.sock
+PUBLIC_DOMAIN=sensor-qa.example.com ./scripts/run_https_local_server.sh
+```
+
+기본 호스트 포트는 Caddy용 `8088`, `8443`입니다. 공유기에서 아래처럼 포트포워딩합니다.
+
+```text
+외부 TCP 80  -> 이 PC 내부 IP:8088
+외부 TCP 443 -> 이 PC 내부 IP:8443
+```
+
+DNS의 `A` 레코드는 공유기 공인 IP를 가리켜야 합니다. Caddy 인증서와 설정 데이터는 `/media/byeongjae/HDD00/autodriving_sensor_qa_caddy`에 저장됩니다.
+
 ## DevOps 파이프라인
 
 이 저장소는 다음 흐름으로 개발과 배포를 연결합니다.
