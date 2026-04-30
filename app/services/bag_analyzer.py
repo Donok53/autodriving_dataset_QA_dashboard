@@ -75,17 +75,24 @@ def read_bag(path: Path, max_messages: int = MAX_BAG_MESSAGES) -> BagReadResult:
         processed_count = 0
 
         for connection, timestamp, rawdata in reader.messages():
+            message = None
+            effective_timestamp = int(timestamp)
+            if connection.msgtype.endswith("/Imu") or "NavSatFix" in connection.msgtype:
+                message = _deserialize_message(reader, connection.msgtype, rawdata)
+                if message is not None:
+                    effective_timestamp = _message_timestamp_ns(message, int(timestamp))
+
             topic_series = topic_by_name.get(connection.topic)
             if topic_series is not None:
-                topic_series.timestamps_ns.append(int(timestamp))
+                topic_series.timestamps_ns.append(effective_timestamp)
 
-            if connection.msgtype.endswith("/Imu") and len(imu_events) < MAX_EVENT_COUNT:
-                event = _detect_imu_acceleration_event(reader, connection.msgtype, rawdata, int(timestamp))
+            if connection.msgtype.endswith("/Imu") and message is not None and len(imu_events) < MAX_EVENT_COUNT:
+                event = _detect_imu_acceleration_event(message, effective_timestamp)
                 if event is not None:
                     imu_events.append(event)
 
-            if "NavSatFix" in connection.msgtype and len(gps_points) < 50_000:
-                point = _read_gps_point(reader, connection.msgtype, rawdata, int(timestamp))
+            if "NavSatFix" in connection.msgtype and message is not None and len(gps_points) < 50_000:
+                point = _read_gps_point(message, effective_timestamp)
                 if point is not None:
                     gps_points.append(point)
 
@@ -332,9 +339,15 @@ def _nearest_offsets_ms(timestamps: list[int], reference_timestamps: list[int]) 
     return offsets
 
 
-def _detect_imu_acceleration_event(reader, msgtype: str, rawdata: bytes, timestamp_ns: int) -> DrivingEvent | None:
+def _deserialize_message(reader, msgtype: str, rawdata: bytes):
     try:
-        message = reader.deserialize(rawdata, msgtype)
+        return reader.deserialize(rawdata, msgtype)
+    except Exception:
+        return None
+
+
+def _detect_imu_acceleration_event(message, timestamp_ns: int) -> DrivingEvent | None:
+    try:
         acceleration = message.linear_acceleration
         lateral_accel = math.sqrt(float(acceleration.x) ** 2 + float(acceleration.y) ** 2)
     except Exception:
@@ -353,9 +366,8 @@ def _detect_imu_acceleration_event(reader, msgtype: str, rawdata: bytes, timesta
     )
 
 
-def _read_gps_point(reader, msgtype: str, rawdata: bytes, timestamp_ns: int) -> tuple[int, float, float] | None:
+def _read_gps_point(message, timestamp_ns: int) -> tuple[int, float, float] | None:
     try:
-        message = reader.deserialize(rawdata, msgtype)
         latitude = float(message.latitude)
         longitude = float(message.longitude)
     except Exception:
