@@ -28,3 +28,14 @@ def test_dashboard_renders_html():
     assert response.status_code == 200
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "QA Score" in response.text
+    assert "CSV/BAG 업로드" in response.text
+
+
+def test_invalid_bag_upload_returns_dashboard_error():
+    response = client.post(
+        "/upload",
+        files={"file": ("broken.bag", b"not a real bag", "application/octet-stream")},
+    )
+
+    assert response.status_code == 200
+    assert "bag 파일을 읽을 수 없습니다" in response.text
