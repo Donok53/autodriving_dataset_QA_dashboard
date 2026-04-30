@@ -13,6 +13,7 @@ build/
 *.egg-info/
 
 uploads/
+runtime/
 *.log
 
 .DS_Store

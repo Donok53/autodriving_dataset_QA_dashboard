@@ -51,13 +51,12 @@ docker run --rm -p 8000:8000 autodriving-sensor-qa
 대용량 bag 업로드를 로컬 HDD에 저장하면서 운영하려면 아래 스크립트를 사용합니다.
 
 ```bash
-export PATH=/home/byeongjae/bin:$PATH
-export DOCKER_HOST=unix:///run/user/1000/docker.sock
+UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads \
 ./scripts/run_local_server.sh
 ```
 
 기본 설정은 업로드 파일 1개당 10GB, 동시 업로드 임시 저장소 250GB입니다.
-임시 파일은 `/media/byeongjae/HDD00/autodriving_sensor_qa_uploads`에 저장되고, 분석 완료 후 삭제됩니다.
+임시 파일은 `UPLOAD_HOST_DIR`에 저장되고, 분석 완료 후 삭제됩니다. `UPLOAD_HOST_DIR`을 지정하지 않으면 프로젝트의 `runtime/uploads`를 사용합니다.
 
 ```text
 http://127.0.0.1:8000
@@ -67,7 +66,7 @@ http://127.0.0.1:8000
 
 ```bash
 APP_PORT=8080 \
-UPLOAD_HOST_DIR=/media/byeongjae/HDD00/autodriving_sensor_qa_uploads \
+UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads \
 ./scripts/run_local_server.sh
 ```
 
@@ -76,9 +75,9 @@ UPLOAD_HOST_DIR=/media/byeongjae/HDD00/autodriving_sensor_qa_uploads \
 공개 도메인을 가지고 있거나 DuckDNS 같은 동적 DNS를 사용할 수 있다면 Caddy reverse proxy로 HTTPS를 붙일 수 있습니다.
 
 ```bash
-export PATH=/home/byeongjae/bin:$PATH
-export DOCKER_HOST=unix:///run/user/1000/docker.sock
-PUBLIC_DOMAIN=sensor-qa.example.com ./scripts/run_https_local_server.sh
+PUBLIC_DOMAIN=sensor-qa.example.com \
+UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads \
+./scripts/run_https_local_server.sh
 ```
 
 기본 호스트 포트는 Caddy용 `8088`, `8443`입니다. 공유기에서 아래처럼 포트포워딩합니다.
@@ -88,7 +87,7 @@ PUBLIC_DOMAIN=sensor-qa.example.com ./scripts/run_https_local_server.sh
 외부 TCP 443 -> 이 PC 내부 IP:8443
 ```
 
-DNS의 `A` 레코드는 공유기 공인 IP를 가리켜야 합니다. Caddy 인증서와 설정 데이터는 `/media/byeongjae/HDD00/autodriving_sensor_qa_caddy`에 저장됩니다.
+DNS의 `A` 레코드는 공유기 공인 IP를 가리켜야 합니다. Caddy 인증서와 설정 데이터는 기본적으로 프로젝트의 `runtime/caddy`에 저장되며, `CADDY_DATA_DIR`, `CADDY_CONFIG_DIR` 환경 변수로 바꿀 수 있습니다.
 
 ## DevOps 파이프라인
 

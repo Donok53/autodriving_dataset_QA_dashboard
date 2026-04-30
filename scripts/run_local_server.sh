@@ -4,7 +4,7 @@ set -euo pipefail
 IMAGE_NAME="${IMAGE_NAME:-autodriving-sensor-qa:local-server}"
 CONTAINER_NAME="${CONTAINER_NAME:-autodriving-sensor-qa-local-server}"
 APP_PORT="${APP_PORT:-8000}"
-UPLOAD_HOST_DIR="${UPLOAD_HOST_DIR:-/media/byeongjae/HDD00/autodriving_sensor_qa_uploads}"
+UPLOAD_HOST_DIR="${UPLOAD_HOST_DIR:-$(pwd)/runtime/uploads}"
 UPLOAD_CONTAINER_DIR="${UPLOAD_CONTAINER_DIR:-/data/uploads}"
 MAX_UPLOAD_BYTES="${MAX_UPLOAD_BYTES:-10737418240}"
 MAX_ACTIVE_UPLOAD_BYTES="${MAX_ACTIVE_UPLOAD_BYTES:-268435456000}"
