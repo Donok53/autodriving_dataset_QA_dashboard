@@ -48,15 +48,14 @@ docker run --rm -p 8000:8000 autodriving-sensor-qa
 
 ## 로컬 서버 운영
 
-대용량 bag 업로드를 로컬 HDD에 저장하면서 운영하려면 아래 스크립트를 사용합니다.
+대용량 bag 업로드를 로컬에서 테스트할 때는 SSD/NVMe 경로에 임시 저장하는 구성을 권장합니다. 기본값은 프로젝트의 `runtime/uploads`입니다.
 
 ```bash
-UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads \
 ./scripts/run_local_server.sh
 ```
 
 기본 설정은 업로드 파일 1개당 10GB, 동시 업로드 임시 저장소 250GB입니다.
-임시 파일은 `UPLOAD_HOST_DIR`에 저장되고, 분석 완료 후 삭제됩니다. `UPLOAD_HOST_DIR`을 지정하지 않으면 프로젝트의 `runtime/uploads`를 사용합니다.
+임시 파일은 `UPLOAD_HOST_DIR`에 저장되고, 분석 완료 후 삭제됩니다. `UPLOAD_HOST_DIR`을 지정하지 않으면 프로젝트의 `runtime/uploads`를 사용합니다. 원본 bag 파일과 임시 저장소를 같은 HDD에 두면 읽기와 쓰기가 겹쳐 느려질 수 있으므로, 대용량 테스트는 SSD/NVMe 임시 저장소를 우선 사용합니다.
 
 ```text
 http://127.0.0.1:8000
@@ -66,7 +65,14 @@ http://127.0.0.1:8000
 
 ```bash
 APP_PORT=8080 \
-UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads \
+UPLOAD_HOST_DIR=./runtime/uploads \
+./scripts/run_local_server.sh
+```
+
+디스크 여유 공간이 더 중요하고 속도 저하를 감수할 수 있다면 HDD 경로를 지정할 수 있습니다.
+
+```bash
+UPLOAD_HOST_DIR=/media/byeongjae/HDD00/autodriving_sensor_qa_uploads \
 ./scripts/run_local_server.sh
 ```
 
@@ -107,7 +113,7 @@ PUBLIC_HTTPS_PORT=18443
 LOCAL_APP_PORT=8088
 CADDY_CONTAINER_DNS=8.8.8.8
 DUCKDNS_RESOLVER=8.8.8.8:53
-UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads
+UPLOAD_HOST_DIR=./runtime/uploads
 ALLOW_LOCAL_UNLIMITED_UPLOADS=true
 LOCAL_UPLOAD_HOSTS=127.0.0.1,localhost,::1
 ```
@@ -126,7 +132,7 @@ LOCAL_UPLOAD_HOSTS=127.0.0.1,localhost,::1
 
 접속 주소는 `https://bagfile-qa.duckdns.org:18443` 형식입니다.
 이 스크립트는 HTTPS 포트만 공개하므로, HTTP 공개가 필요하지 않다면 공유기의 18080/8088 포워딩은 끄면 됩니다.
-서버 PC에서 직접 대용량 파일을 올릴 때는 Caddy와 공유기를 거치지 않는 `http://127.0.0.1:8088` 로컬 주소를 사용하면 업로드 경로가 짧아집니다.
+서버 PC에서 직접 대용량 파일을 올릴 때는 Caddy와 공유기를 거치지 않는 `http://127.0.0.1:8088` 로컬 주소를 사용하면 업로드 경로가 짧아집니다. 이때 `UPLOAD_HOST_DIR=./runtime/uploads`처럼 SSD/NVMe 쪽 임시 저장소를 쓰면 원본 HDD 읽기와 임시 파일 쓰기가 분리되어 더 안정적입니다.
 기본값에서는 `127.0.0.1` 또는 `localhost`로 들어온 로컬 직결 업로드만 파일 1개당 10GB 제한을 적용하지 않습니다. 공개 HTTPS 주소에는 10GB 제한이 유지됩니다.
 
 ## DevOps 파이프라인
