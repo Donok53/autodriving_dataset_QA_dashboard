@@ -1,3 +1,4 @@
+import asyncio
 from io import BytesIO
 import os
 import tempfile
@@ -357,6 +358,42 @@ async def _write_chunks_to_temp_file(
             status_code=507,
             detail="임시 저장 공간이 부족합니다. 디스크 용량을 확보한 뒤 다시 업로드해주세요.",
         ) from exc
+    except HTTPException as exc:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        _release_upload_reservation(job_id)
+        update_job(
+            job_id,
+            status="failed",
+            progress=100,
+            stage="업로드 실패",
+            error=str(exc.detail),
+        )
+        raise
+    except asyncio.CancelledError:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        _release_upload_reservation(job_id)
+        update_job(
+            job_id,
+            status="failed",
+            progress=100,
+            stage="업로드 실패",
+            error="업로드가 중단되었습니다. 다시 시도해주세요.",
+        )
+        raise
+    except Exception as exc:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        _release_upload_reservation(job_id)
+        update_job(
+            job_id,
+            status="failed",
+            progress=100,
+            stage="업로드 실패",
+            error="업로드가 중단되었습니다. 다시 시도해주세요.",
+        )
+        raise HTTPException(status_code=499, detail="업로드가 중단되었습니다. 다시 시도해주세요.") from exc
 
     if total_bytes == 0:
         if temp_path is None:

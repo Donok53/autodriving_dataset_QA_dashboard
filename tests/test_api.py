@@ -1,5 +1,7 @@
+import asyncio
 import importlib
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 main_module = importlib.import_module("app.main")
@@ -163,6 +165,42 @@ def test_local_raw_upload_skips_file_size_limit(monkeypatch):
         )
 
     assert response.status_code == 200
+
+
+def test_interrupted_upload_cleans_temp_file_and_marks_job_failed(tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "UPLOAD_TEMP_DIR", tmp_path)
+    with main_module._upload_reservation_lock:
+        main_module._upload_reservations.clear()
+
+    job = main_module.create_job("interrupted.bag", "bag")
+
+    async def run_interrupted_upload():
+        read_count = 0
+
+        async def read_next_chunk():
+            nonlocal read_count
+            read_count += 1
+            if read_count == 1:
+                return b"partial upload"
+            raise RuntimeError("client disconnected")
+
+        await main_module._write_chunks_to_temp_file(read_next_chunk, ".bag", job.job_id)
+
+    try:
+        asyncio.run(run_interrupted_upload())
+    except HTTPException as exc:
+        assert exc.status_code == 499
+        assert exc.detail == "업로드가 중단되었습니다. 다시 시도해주세요."
+    else:
+        raise AssertionError("interrupted upload should fail")
+
+    updated_job = main_module.get_job(job.job_id)
+    assert updated_job is not None
+    assert updated_job.status == "failed"
+    assert updated_job.stage == "업로드 실패"
+    assert updated_job.error == "업로드가 중단되었습니다. 다시 시도해주세요."
+    assert list(tmp_path.iterdir()) == []
+    assert main_module._upload_reservations == {}
 
 
 def test_raw_upload_rejects_when_active_storage_pool_is_full(monkeypatch):
