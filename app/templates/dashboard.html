@@ -23,7 +23,10 @@
         <form action="/upload" method="post" enctype="multipart/form-data">
           <label for="file">CSV 업로드</label>
           <input id="file" name="file" type="file" accept=".csv" required>
-          <button type="submit">분석</button>
+          <div class="upload-actions">
+            <button type="submit">분석</button>
+            <a href="/">샘플 데이터</a>
+          </div>
         </form>
       </section>
 
