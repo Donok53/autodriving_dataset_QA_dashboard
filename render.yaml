@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: autodriving-sensor-qa-dashboard
+    env: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
