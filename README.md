@@ -43,3 +43,19 @@ docker run --rm -p 8000:8000 autodriving-sensor-qa
 ```
 
 컨테이너 실행 후 `http://127.0.0.1:8000/health`에서 상태를 확인할 수 있습니다.
+
+## DevOps 파이프라인
+
+이 저장소는 다음 흐름으로 개발과 배포를 연결합니다.
+
+```text
+Git push
+  -> GitHub Actions
+  -> pytest
+  -> Docker image build
+  -> Render Docker Web Service
+```
+
+CI 워크플로는 `.github/workflows/ci.yml`에 정의되어 있으며, push 또는 pull request가 발생하면 테스트와 Docker 빌드 검증을 자동으로 수행합니다.
+
+Render 배포는 `render.yaml`을 기준으로 Docker Web Service를 생성하고, `/health` 엔드포인트를 health check로 사용합니다.
