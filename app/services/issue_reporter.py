@@ -56,6 +56,17 @@ def report_unexpected_error(exc: Exception, context: dict[str, Any] | None = Non
     return issue_url
 
 
+def issue_reporting_status() -> dict[str, object]:
+    return {
+        "enabled": _auto_issue_enabled(),
+        "repository_configured": bool(_repository_name()),
+        "token_configured": bool(os.getenv("GITHUB_ISSUE_TOKEN", "").strip()),
+        "labels": _issue_labels(),
+        "cooldown_seconds": _cooldown_seconds(),
+        "max_issues_per_runtime": _max_issues_per_runtime(),
+    }
+
+
 def _auto_issue_enabled() -> bool:
     return os.getenv("AUTO_CREATE_GITHUB_ISSUES", "false").lower() in {"1", "true", "yes", "on"}
 

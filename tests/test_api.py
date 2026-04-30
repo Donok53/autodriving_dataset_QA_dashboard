@@ -18,12 +18,14 @@ def test_health_check_returns_ok():
 
 def test_analysis_click_error_scenario_reports_issue(monkeypatch):
     monkeypatch.setenv("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO", "true")
+    monkeypatch.setenv("AUTO_CREATE_GITHUB_ISSUES", "true")
+    monkeypatch.setenv("GITHUB_ISSUE_TOKEN", "secret-token")
 
     captured = {}
     monkeypatch.setattr(
         main_module,
         "report_unexpected_error",
-        lambda exc, context: captured.update({"exc": exc, "context": context}) or None,
+        lambda exc, context: captured.update({"exc": exc, "context": context}) or "https://github.com/example/issues/1",
     )
 
     error_client = TestClient(main_module.app, raise_server_exceptions=False)
@@ -39,13 +41,37 @@ def test_analysis_click_error_scenario_reports_issue(monkeypatch):
     )
 
     assert response.status_code == 500
+    assert response.json()["issue_url"] == "https://github.com/example/issues/1"
+    assert "GitHub issue가 생성되었습니다" in response.json()["detail"]
     assert isinstance(captured["exc"], RuntimeError)
     assert captured["context"] == {
         "request_id": "test-request-id",
         "method": "POST",
         "path": "/api/upload/raw",
-        "stage": "request",
+        "stage": "analysis_click_error_scenario",
     }
+
+
+def test_analysis_click_error_scenario_returns_diagnostics_when_issue_disabled(monkeypatch):
+    monkeypatch.setenv("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO", "true")
+    monkeypatch.setenv("AUTO_CREATE_GITHUB_ISSUES", "false")
+
+    error_client = TestClient(main_module.app, raise_server_exceptions=False)
+    response = error_client.post(
+        "/api/upload/raw",
+        content=b"timestamp,speed_mps\n0,0\n",
+        headers={
+            "content-type": "application/octet-stream",
+            "x-filename": "sample_sensor_log.csv",
+            "x-error-test-scenario": "analysis-clicks",
+        },
+    )
+
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["issue_url"] is None
+    assert payload["issue_reporting"]["enabled"] is False
+    assert "AUTO_CREATE_GITHUB_ISSUES" in payload["detail"]
 
 
 def test_sample_analysis_api_returns_summary():

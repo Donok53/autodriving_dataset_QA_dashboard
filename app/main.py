@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.services.bag_analyzer import InvalidBagFileError, analyze_bag
 from app.services.analyzer import InvalidSensorLogError, analyze_csv
-from app.services.issue_reporter import report_unexpected_error
+from app.services.issue_reporter import issue_reporting_status, report_unexpected_error
 from app.services.job_store import create_job, get_job, update_job
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -280,12 +280,36 @@ async def create_raw_analysis_job(
             raise RuntimeError("intentional runtime error after repeated analysis button clicks")
         except RuntimeError as exc:
             logger.exception("analysis_click_error_scenario_triggered path=%s", request.url.path)
-            _report_request_exception(
-                request,
+            request_id = request.headers.get("rndr-id") or request.headers.get("x-request-id") or "-"
+            issue_url = report_unexpected_error(
                 exc,
-                request.headers.get("rndr-id") or request.headers.get("x-request-id") or "-",
+                {
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "stage": "analysis_click_error_scenario",
+                },
             )
-            raise
+            status = issue_reporting_status()
+            if issue_url:
+                detail = f"오류 재현 완료. GitHub issue가 생성되었습니다: {issue_url}"
+            elif not status["enabled"]:
+                detail = "오류 재현 완료. AUTO_CREATE_GITHUB_ISSUES가 true가 아니라 issue를 만들지 않았습니다."
+            elif not status["token_configured"]:
+                detail = "오류 재현 완료. GITHUB_ISSUE_TOKEN이 없어 issue를 만들지 않았습니다."
+            elif not status["repository_configured"]:
+                detail = "오류 재현 완료. GITHUB_ISSUE_REPOSITORY가 없어 issue를 만들지 않았습니다."
+            else:
+                detail = "오류 재현 완료. issue 생성에 실패했거나 중복으로 건너뛰었습니다. Render Logs에서 auto_issue_failed 또는 auto_issue_skipped를 확인하세요."
+
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": detail,
+                    "issue_url": issue_url,
+                    "issue_reporting": status,
+                },
+            )
 
     enforce_size_limit = not _is_local_unlimited_upload(request)
     content_length = _validate_content_length(request.headers.get("content-length"), enforce_size_limit)
