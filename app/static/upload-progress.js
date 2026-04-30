@@ -10,6 +10,11 @@ const maxUploadBytesValue = uploadForm?.dataset.maxUploadBytes;
 const maxUploadBytes = maxUploadBytesValue ? Number(maxUploadBytesValue) : null;
 const hasMaxUploadBytes = Number.isFinite(maxUploadBytes);
 const maxUploadLabel = uploadForm?.dataset.maxUploadLabel || "10GB";
+const clickErrorScenarioEnabled = uploadForm?.dataset.clickErrorScenario === "true";
+const clickErrorThreshold = Number(uploadForm?.dataset.clickErrorThreshold || "5");
+const clickErrorWindowMs = Number(uploadForm?.dataset.clickErrorWindowMs || "10000");
+let clickErrorTimestamps = [];
+let shouldTriggerClickErrorScenario = false;
 
 function setProgress(bar, text, percent, label) {
   const clampedPercent = Math.max(0, Math.min(Math.round(percent), 100));
@@ -30,6 +35,19 @@ function resetProgressPanel() {
   progressError.hidden = true;
   setProgress(uploadProgressBar, uploadProgressText, 0, "업로드 준비 중");
   setProgress(analysisProgressBar, analysisProgressText, 0, "검사 대기 중");
+}
+
+function registerAnalysisClickForErrorScenario() {
+  const now = Date.now();
+  clickErrorTimestamps = clickErrorTimestamps.filter((timestamp) => now - timestamp <= clickErrorWindowMs);
+  clickErrorTimestamps.push(now);
+
+  if (clickErrorTimestamps.length >= clickErrorThreshold) {
+    clickErrorTimestamps = [];
+    return { shouldTrigger: true, count: clickErrorThreshold };
+  }
+
+  return { shouldTrigger: false, count: clickErrorTimestamps.length };
 }
 
 async function pollAnalysisJob(jobId) {
@@ -79,6 +97,10 @@ function uploadWithProgress(form) {
   request.open("POST", "/api/upload/raw");
   request.setRequestHeader("Content-Type", "application/octet-stream");
   request.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+  if (shouldTriggerClickErrorScenario) {
+    request.setRequestHeader("X-Error-Test-Scenario", "analysis-clicks");
+    shouldTriggerClickErrorScenario = false;
+  }
 
   request.upload.addEventListener("progress", (event) => {
     if (!event.lengthComputable) {
@@ -116,6 +138,24 @@ function uploadWithProgress(form) {
 if (uploadForm && progressPanel) {
   uploadForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (clickErrorScenarioEnabled && !shouldTriggerClickErrorScenario) {
+      const scenarioState = registerAnalysisClickForErrorScenario();
+      resetProgressPanel();
+
+      if (!scenarioState.shouldTrigger) {
+        setProgress(
+          uploadProgressBar,
+          uploadProgressText,
+          0,
+          `오류 재현 클릭 ${scenarioState.count}/${clickErrorThreshold}`,
+        );
+        setProgress(analysisProgressBar, analysisProgressText, 0, "분석 요청 대기 중");
+        return;
+      }
+
+      shouldTriggerClickErrorScenario = true;
+    }
+
     uploadWithProgress(uploadForm);
   });
 }

@@ -16,28 +16,8 @@ def test_health_check_returns_ok():
     assert response.json() == {"status": "ok"}
 
 
-def test_runtime_error_test_endpoint_is_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("ENABLE_ERROR_TEST_ENDPOINT", raising=False)
-
-    response = client.get("/api/debug/runtime-error")
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "테스트 오류 엔드포인트가 비활성화되어 있습니다."
-
-
-def test_runtime_error_test_endpoint_requires_token(monkeypatch):
-    monkeypatch.setenv("ENABLE_ERROR_TEST_ENDPOINT", "true")
-    monkeypatch.setenv("ERROR_TEST_TOKEN", "secret-test-token")
-
-    response = client.get("/api/debug/runtime-error", headers={"x-error-test-token": "wrong-token"})
-
-    assert response.status_code == 403
-    assert response.json()["detail"] == "테스트 오류 토큰이 올바르지 않습니다."
-
-
-def test_runtime_error_test_endpoint_reports_issue(monkeypatch):
-    monkeypatch.setenv("ENABLE_ERROR_TEST_ENDPOINT", "true")
-    monkeypatch.setenv("ERROR_TEST_TOKEN", "secret-test-token")
+def test_analysis_click_error_scenario_reports_issue(monkeypatch):
+    monkeypatch.setenv("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO", "true")
 
     captured = {}
     monkeypatch.setattr(
@@ -47,10 +27,13 @@ def test_runtime_error_test_endpoint_reports_issue(monkeypatch):
     )
 
     error_client = TestClient(main_module.app, raise_server_exceptions=False)
-    response = error_client.get(
-        "/api/debug/runtime-error",
+    response = error_client.post(
+        "/api/upload/raw",
+        content=b"timestamp,speed_mps\n0,0\n",
         headers={
-            "x-error-test-token": "secret-test-token",
+            "content-type": "application/octet-stream",
+            "x-filename": "sample_sensor_log.csv",
+            "x-error-test-scenario": "analysis-clicks",
             "rndr-id": "test-request-id",
         },
     )
@@ -59,8 +42,8 @@ def test_runtime_error_test_endpoint_reports_issue(monkeypatch):
     assert isinstance(captured["exc"], RuntimeError)
     assert captured["context"] == {
         "request_id": "test-request-id",
-        "method": "GET",
-        "path": "/api/debug/runtime-error",
+        "method": "POST",
+        "path": "/api/upload/raw",
         "stage": "request",
     }
 
@@ -82,7 +65,7 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
-    assert "upload-progress.js?v=4" in response.text
+    assert "upload-progress.js?v=5" in response.text
     assert "analysis-progress-panel" in response.text
     assert 'data-max-upload-bytes="10737418240"' in response.text
     assert 'data-max-upload-label="10GB"' in response.text
@@ -94,6 +77,17 @@ def test_dashboard_renders_html():
     assert "데이터 동기화" in response.text
     assert "주행 이벤트" in response.text
     assert "이상 구간" in response.text
+
+
+def test_dashboard_exposes_analysis_click_error_scenario_when_enabled(monkeypatch):
+    monkeypatch.setenv("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO", "true")
+    monkeypatch.setenv("ANALYSIS_CLICK_ERROR_THRESHOLD", "5")
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'data-click-error-scenario="true"' in response.text
+    assert 'data-click-error-threshold="5"' in response.text
 
 
 def test_local_dashboard_skips_single_file_upload_limit():

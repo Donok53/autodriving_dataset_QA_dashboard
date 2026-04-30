@@ -6,7 +6,7 @@
     <title>Autodriving Sensor QA</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/pagination.js?v=2" defer></script>
-    <script src="/static/upload-progress.js?v=4" defer></script>
+    <script src="/static/upload-progress.js?v=5" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -29,6 +29,9 @@
           enctype="multipart/form-data"
           data-max-upload-bytes="{% if upload_limit_bytes is not none %}{{ upload_limit_bytes }}{% endif %}"
           data-max-upload-label="{{ upload_limit_label }}"
+          data-click-error-scenario="{{ 'true' if analysis_click_error_enabled else 'false' }}"
+          data-click-error-threshold="{{ analysis_click_error_threshold }}"
+          data-click-error-window-ms="{{ analysis_click_error_window_ms }}"
         >
           <label for="file">CSV/BAG 업로드</label>
           <input id="file" name="file" type="file" accept=".csv,.bag" required>

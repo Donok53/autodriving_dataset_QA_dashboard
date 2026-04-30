@@ -61,6 +61,13 @@ def _env_flag(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _cleanup_abandoned_upload_files()
@@ -164,19 +171,6 @@ def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/debug/runtime-error")
-def trigger_runtime_error_for_issue_test(request: Request):
-    if not _env_flag("ENABLE_ERROR_TEST_ENDPOINT"):
-        raise HTTPException(status_code=404, detail="테스트 오류 엔드포인트가 비활성화되어 있습니다.")
-
-    expected_token = os.getenv("ERROR_TEST_TOKEN", "").strip()
-    provided_token = request.headers.get("x-error-test-token", "").strip()
-    if not expected_token or provided_token != expected_token:
-        raise HTTPException(status_code=403, detail="테스트 오류 토큰이 올바르지 않습니다.")
-
-    raise RuntimeError("intentional runtime error for auto issue test")
-
-
 @app.get("/api/sample-analysis")
 def sample_analysis() -> dict[str, object]:
     try:
@@ -202,6 +196,9 @@ def _dashboard_response(
             "has_result": summary is not None,
             "upload_limit_bytes": None if local_unlimited_upload else MAX_UPLOAD_BYTES,
             "upload_limit_label": "제한 없음" if local_unlimited_upload else MAX_UPLOAD_SIZE_LABEL,
+            "analysis_click_error_enabled": _env_flag("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO"),
+            "analysis_click_error_threshold": max(2, _env_int("ANALYSIS_CLICK_ERROR_THRESHOLD", 5)),
+            "analysis_click_error_window_ms": max(1000, _env_int("ANALYSIS_CLICK_ERROR_WINDOW_SECONDS", 10) * 1000),
         },
     )
 
@@ -258,6 +255,9 @@ async def create_raw_analysis_job(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> JSONResponse:
+    if _should_trigger_analysis_click_error_scenario(request):
+        raise RuntimeError("intentional runtime error after repeated analysis button clicks")
+
     enforce_size_limit = not _is_local_unlimited_upload(request)
     content_length = _validate_content_length(request.headers.get("content-length"), enforce_size_limit)
     filename, suffix = _validate_upload_filename(_filename_from_header(request))
@@ -274,6 +274,13 @@ async def create_raw_analysis_job(
 
     updated_job = get_job(job.job_id) or job
     return JSONResponse(updated_job.to_dict())
+
+
+def _should_trigger_analysis_click_error_scenario(request: Request) -> bool:
+    return (
+        _env_flag("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO")
+        and request.headers.get("x-error-test-scenario") == "analysis-clicks"
+    )
 
 
 @app.get("/api/jobs/{job_id}")
