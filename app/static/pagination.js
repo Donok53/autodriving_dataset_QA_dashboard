@@ -29,6 +29,7 @@ function initializePagination(container) {
   function renderPage() {
     const start = pageIndex * pageSize;
     const end = start + pageSize;
+    const visibleEnd = Math.min(end, items.length);
 
     items.forEach((item, index) => {
       item.hidden = index < start || index >= end;
@@ -36,7 +37,7 @@ function initializePagination(container) {
 
     previousButton.disabled = pageIndex === 0;
     nextButton.disabled = pageIndex === totalPages - 1;
-    pageStatus.textContent = `${pageIndex + 1} / ${totalPages}`;
+    pageStatus.textContent = `${start + 1}-${visibleEnd} / ${items.length}`;
   }
 
   previousButton.addEventListener("click", () => {

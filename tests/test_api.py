@@ -29,6 +29,7 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "QA Score" in response.text
     assert "CSV/BAG 업로드" in response.text
+    assert "전체 이벤트" in response.text
     assert "pagination.js" in response.text
     assert 'data-page-size="5"' in response.text
     assert 'data-page-size="10"' in response.text
