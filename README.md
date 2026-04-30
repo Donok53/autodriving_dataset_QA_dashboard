@@ -159,6 +159,18 @@ bag 분석은 `rosbags` 라이브러리를 사용하여 ROS 설치 없이 ROS1 `
 
 대용량 bag 파일은 브라우저 업로드와 임시 저장에 시간이 오래 걸릴 수 있으므로, 실제 주행 데이터 검증은 로컬 실행 또는 Docker 실행 환경에서 먼저 확인하는 것을 권장합니다.
 
+## 샘플 데이터
+
+저장소에는 CSV 샘플 1개와 ROS bag 샘플 2개가 포함되어 있습니다.
+
+| 파일 | 설명 |
+| --- | --- |
+| `data/sample_sensor_log.csv` | CSV 기반 센서 로그 품질 검사 샘플 |
+| `data/sample_no_gps_5s.bag` | 앞 5초 구간을 추출한 ROS bag 샘플, GPS 계열 토픽 누락 |
+| `data/sample_no_vehicle_motion_5s.bag` | 앞 5초 구간을 추출한 ROS bag 샘플, 차량 움직임 명령 계열 토픽 누락 |
+
+bag 샘플은 GitHub 업로드 제한과 Render 무료 환경을 고려해 raw image/point cloud 같은 대용량 토픽을 일부 다운샘플했습니다. 센서 토픽 분류, 누락 데이터 감지, topic 주기 분석 흐름을 확인하는 용도입니다.
+
 ## CSV 스키마
 
 샘플 데이터는 `data/sample_sensor_log.csv`에 포함되어 있습니다.
