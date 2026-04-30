@@ -88,6 +88,34 @@ class UploadTooLargeError(ValueError):
     pass
 
 
+def _report_request_exception(request: Request, exc: Exception, request_id: str) -> None:
+    report_unexpected_error(
+        exc,
+        {
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "stage": "request",
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(request: Request, exc: Exception):
+    request_id = request.headers.get("rndr-id") or request.headers.get("x-request-id") or "-"
+    logger.exception(
+        "request_unhandled_exception method=%s path=%s request_id=%s",
+        request.method,
+        request.url.path,
+        request_id,
+    )
+    _report_request_exception(request, exc, request_id)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "예상하지 못한 서버 오류가 발생했습니다."},
+    )
+
+
 @app.middleware("http")
 async def log_request(request: Request, call_next):
     request_id = request.headers.get("rndr-id") or request.headers.get("x-request-id") or "-"
@@ -104,15 +132,7 @@ async def log_request(request: Request, call_next):
             duration_ms,
             request_id,
         )
-        report_unexpected_error(
-            exc,
-            {
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "stage": "request",
-            },
-        )
+        _report_request_exception(request, exc, request_id)
         raise
 
     duration_ms = int((time.perf_counter() - start_time) * 1000)
