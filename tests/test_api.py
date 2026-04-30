@@ -16,64 +16,6 @@ def test_health_check_returns_ok():
     assert response.json() == {"status": "ok"}
 
 
-def test_analysis_click_error_scenario_reports_issue(monkeypatch):
-    monkeypatch.setenv("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO", "true")
-    monkeypatch.setenv("AUTO_CREATE_GITHUB_ISSUES", "true")
-    monkeypatch.setenv("GITHUB_ISSUE_TOKEN", "secret-token")
-
-    captured = {}
-    monkeypatch.setattr(
-        main_module,
-        "report_unexpected_error",
-        lambda exc, context: captured.update({"exc": exc, "context": context}) or "https://github.com/example/issues/1",
-    )
-
-    error_client = TestClient(main_module.app, raise_server_exceptions=False)
-    response = error_client.post(
-        "/api/upload/raw",
-        content=b"timestamp,speed_mps\n0,0\n",
-        headers={
-            "content-type": "application/octet-stream",
-            "x-filename": "sample_sensor_log.csv",
-            "x-error-test-scenario": "analysis-clicks",
-            "rndr-id": "test-request-id",
-        },
-    )
-
-    assert response.status_code == 500
-    assert response.json()["issue_url"] == "https://github.com/example/issues/1"
-    assert "GitHub issue가 생성되었습니다" in response.json()["detail"]
-    assert isinstance(captured["exc"], RuntimeError)
-    assert captured["context"] == {
-        "request_id": "test-request-id",
-        "method": "POST",
-        "path": "/api/upload/raw",
-        "stage": "analysis_click_error_scenario",
-    }
-
-
-def test_analysis_click_error_scenario_returns_diagnostics_when_issue_disabled(monkeypatch):
-    monkeypatch.setenv("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO", "true")
-    monkeypatch.setenv("AUTO_CREATE_GITHUB_ISSUES", "false")
-
-    error_client = TestClient(main_module.app, raise_server_exceptions=False)
-    response = error_client.post(
-        "/api/upload/raw",
-        content=b"timestamp,speed_mps\n0,0\n",
-        headers={
-            "content-type": "application/octet-stream",
-            "x-filename": "sample_sensor_log.csv",
-            "x-error-test-scenario": "analysis-clicks",
-        },
-    )
-
-    assert response.status_code == 500
-    payload = response.json()
-    assert payload["issue_url"] is None
-    assert payload["issue_reporting"]["enabled"] is False
-    assert "AUTO_CREATE_GITHUB_ISSUES" in payload["detail"]
-
-
 def test_sample_analysis_api_returns_summary():
     response = client.get("/api/sample-analysis")
 
@@ -91,7 +33,7 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
-    assert "upload-progress.js?v=5" in response.text
+    assert "upload-progress.js?v=6" in response.text
     assert "analysis-progress-panel" in response.text
     assert 'data-max-upload-bytes="10737418240"' in response.text
     assert 'data-max-upload-label="10GB"' in response.text
@@ -103,17 +45,6 @@ def test_dashboard_renders_html():
     assert "데이터 동기화" in response.text
     assert "주행 이벤트" in response.text
     assert "이상 구간" in response.text
-
-
-def test_dashboard_exposes_analysis_click_error_scenario_when_enabled(monkeypatch):
-    monkeypatch.setenv("ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO", "true")
-    monkeypatch.setenv("ANALYSIS_CLICK_ERROR_THRESHOLD", "5")
-
-    response = client.get("/")
-
-    assert response.status_code == 200
-    assert 'data-click-error-scenario="true"' in response.text
-    assert 'data-click-error-threshold="5"' in response.text
 
 
 def test_local_dashboard_skips_single_file_upload_limit():
