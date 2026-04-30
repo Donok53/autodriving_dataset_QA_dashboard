@@ -119,6 +119,27 @@ def test_raw_upload_rejects_file_over_size_limit(monkeypatch):
     assert response.json()["detail"] == "파일은 5B 이하만 업로드할 수 있습니다."
 
 
+def test_raw_upload_rejects_when_active_storage_pool_is_full(monkeypatch):
+    with main_module._upload_reservation_lock:
+        main_module._upload_reservations.clear()
+
+    monkeypatch.setattr(main_module, "MAX_UPLOAD_BYTES", 20)
+    monkeypatch.setattr(main_module, "MAX_ACTIVE_UPLOAD_BYTES", 5)
+    monkeypatch.setattr(main_module, "MAX_ACTIVE_UPLOAD_SIZE_LABEL", "5B")
+
+    response = client.post(
+        "/api/upload/raw",
+        content=b"123456",
+        headers={
+            "content-type": "application/octet-stream",
+            "x-filename": "too-large-pool.bag",
+        },
+    )
+
+    assert response.status_code == 507
+    assert response.json()["detail"] == "동시 업로드 저장 한도 5B를 초과했습니다. 다른 분석이 끝난 뒤 다시 시도해주세요."
+
+
 def test_async_upload_rejects_unsupported_file_type():
     response = client.post(
         "/api/upload",

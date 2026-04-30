@@ -1,6 +1,8 @@
 from io import BytesIO
+import os
 import tempfile
 from pathlib import Path
+from threading import Lock
 from urllib.parse import unquote
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
@@ -16,8 +18,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_sensor_log.csv"
 SUPPORTED_UPLOAD_SUFFIXES = {".csv", ".bag"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024
-MAX_UPLOAD_SIZE_LABEL = "10GB"
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024 * 1024)))
+MAX_ACTIVE_UPLOAD_BYTES = int(os.getenv("MAX_ACTIVE_UPLOAD_BYTES", str(250 * 1024 * 1024 * 1024)))
+MAX_UPLOAD_SIZE_LABEL = os.getenv("MAX_UPLOAD_SIZE_LABEL", "10GB")
+MAX_ACTIVE_UPLOAD_SIZE_LABEL = os.getenv("MAX_ACTIVE_UPLOAD_SIZE_LABEL", "250GB")
+UPLOAD_TEMP_DIR = Path(os.getenv("UPLOAD_TEMP_DIR", tempfile.gettempdir()))
+_upload_reservation_lock = Lock()
+_upload_reservations: dict[str, int] = {}
 templates = Jinja2Templates(directory=PROJECT_ROOT / "app" / "templates")
 
 app = FastAPI(
@@ -97,9 +104,15 @@ def _dashboard_response(
 
 
 async def _analyze_uploaded_bag(request: Request, file: UploadFile):
-    with tempfile.NamedTemporaryFile(suffix=".bag", delete=False) as temp_file:
+    with _create_upload_temp_file(".bag") as temp_file:
         temp_path = Path(temp_file.name)
-        while chunk := await file.read(1024 * 1024):
+        total_bytes = 0
+        while chunk := await file.read(UPLOAD_CHUNK_SIZE):
+            if total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
+                temp_path.unlink(missing_ok=True)
+                summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
+                return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, _upload_too_large_message())
+            total_bytes += len(chunk)
             temp_file.write(chunk)
 
     try:
@@ -132,11 +145,16 @@ async def create_raw_analysis_job(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> JSONResponse:
-    _validate_content_length(request.headers.get("content-length"))
+    content_length = _validate_content_length(request.headers.get("content-length"))
     filename, suffix = _validate_upload_filename(_filename_from_header(request))
 
     job = create_job(filename, suffix.removeprefix("."))
-    temp_path = await _write_request_stream_to_temp_file(request, suffix, job.job_id)
+    _reserve_upload_bytes(job.job_id, content_length or 0)
+    try:
+        temp_path = await _write_request_stream_to_temp_file(request, suffix, job.job_id)
+    except Exception:
+        _release_upload_reservation(job.job_id)
+        raise
     background_tasks.add_task(_run_analysis_job, job.job_id, temp_path, suffix)
 
     updated_job = get_job(job.job_id) or job
@@ -186,28 +204,65 @@ def _validate_upload_filename(filename: str | None) -> tuple[str, str]:
     return clean_filename, suffix
 
 
-def _validate_content_length(raw_content_length: str | None) -> None:
+def _validate_content_length(raw_content_length: str | None) -> int | None:
     if raw_content_length is None:
-        return
+        return None
 
     try:
         content_length = int(raw_content_length)
     except ValueError:
-        return
+        return None
 
     if content_length > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=_upload_too_large_message())
+
+    return content_length
 
 
 def _upload_too_large_message() -> str:
     return f"파일은 {MAX_UPLOAD_SIZE_LABEL} 이하만 업로드할 수 있습니다."
 
 
+def _upload_storage_limit_message() -> str:
+    return f"동시 업로드 저장 한도 {MAX_ACTIVE_UPLOAD_SIZE_LABEL}를 초과했습니다. 다른 분석이 끝난 뒤 다시 시도해주세요."
+
+
+def _reserve_upload_bytes(job_id: str, byte_count: int) -> None:
+    with _upload_reservation_lock:
+        current_reserved = _upload_reservations.get(job_id, 0)
+        next_reserved = max(current_reserved, byte_count)
+        next_total = sum(_upload_reservations.values()) - current_reserved + next_reserved
+        if next_total > MAX_ACTIVE_UPLOAD_BYTES:
+            raise HTTPException(status_code=507, detail=_upload_storage_limit_message())
+        _upload_reservations[job_id] = next_reserved
+
+
+def _release_upload_reservation(job_id: str) -> None:
+    with _upload_reservation_lock:
+        _upload_reservations.pop(job_id, None)
+
+
+def _create_upload_temp_file(suffix: str):
+    UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    return tempfile.NamedTemporaryFile(
+        suffix=suffix,
+        prefix="sensor-qa-upload-",
+        dir=UPLOAD_TEMP_DIR,
+        delete=False,
+    )
+
+
 async def _write_upload_to_temp_file(file: UploadFile, suffix: str, job_id: str) -> Path:
+    _reserve_upload_bytes(job_id, 0)
+
     async def read_next_chunk() -> bytes:
         return await file.read(UPLOAD_CHUNK_SIZE)
 
-    return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id)
+    try:
+        return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id)
+    except Exception:
+        _release_upload_reservation(job_id)
+        raise
 
 
 async def _write_request_stream_to_temp_file(request: Request, suffix: str, job_id: str) -> Path:
@@ -227,12 +282,13 @@ async def _write_chunks_to_temp_file(read_next_chunk, suffix: str, job_id: str) 
     total_bytes = 0
 
     try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+        with _create_upload_temp_file(suffix) as temp_file:
             temp_path = Path(temp_file.name)
             update_job(job_id, status="pending", progress=3, stage="파일 저장 중")
             while chunk := await read_next_chunk():
                 if total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
                     raise UploadTooLargeError
+                _reserve_upload_bytes(job_id, total_bytes + len(chunk))
                 total_bytes += len(chunk)
                 temp_file.write(chunk)
 
@@ -250,6 +306,7 @@ async def _write_chunks_to_temp_file(read_next_chunk, suffix: str, job_id: str) 
     except OSError as exc:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
+        _release_upload_reservation(job_id)
         update_job(
             job_id,
             status="failed",
@@ -266,6 +323,7 @@ async def _write_chunks_to_temp_file(read_next_chunk, suffix: str, job_id: str) 
         if temp_path is None:
             raise HTTPException(status_code=400, detail="비어 있는 파일입니다.")
         temp_path.unlink(missing_ok=True)
+        _release_upload_reservation(job_id)
         update_job(job_id, status="failed", progress=100, stage="업로드 실패", error="비어 있는 파일입니다.")
         raise HTTPException(status_code=400, detail="비어 있는 파일입니다.")
 
@@ -299,3 +357,4 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
         update_job(job_id, status="failed", progress=100, stage="분석 실패", error=f"예상하지 못한 오류: {exc}")
     finally:
         temp_path.unlink(missing_ok=True)
+        _release_upload_reservation(job_id)

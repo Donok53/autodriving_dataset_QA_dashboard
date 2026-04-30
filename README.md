@@ -46,6 +46,31 @@ docker run --rm -p 8000:8000 autodriving-sensor-qa
 
 컨테이너 실행 후 `http://127.0.0.1:8000/health`에서 상태를 확인할 수 있습니다.
 
+## 로컬 서버 운영
+
+대용량 bag 업로드를 로컬 HDD에 저장하면서 운영하려면 아래 스크립트를 사용합니다.
+
+```bash
+export PATH=/home/byeongjae/bin:$PATH
+export DOCKER_HOST=unix:///run/user/1000/docker.sock
+./scripts/run_local_server.sh
+```
+
+기본 설정은 업로드 파일 1개당 10GB, 동시 업로드 임시 저장소 250GB입니다.
+임시 파일은 `/media/byeongjae/HDD00/autodriving_sensor_qa_uploads`에 저장되고, 분석 완료 후 삭제됩니다.
+
+```text
+http://127.0.0.1:8000
+```
+
+포트나 저장 위치를 바꾸려면 실행 전에 환경 변수를 지정합니다.
+
+```bash
+APP_PORT=8080 \
+UPLOAD_HOST_DIR=/media/byeongjae/HDD00/autodriving_sensor_qa_uploads \
+./scripts/run_local_server.sh
+```
+
 ## DevOps 파이프라인
 
 이 저장소는 다음 흐름으로 개발과 배포를 연결합니다.
