@@ -104,6 +104,7 @@ PUBLIC_DOMAIN=bagfile-qa.duckdns.org
 DUCKDNS_API_TOKEN=replace_with_duckdns_token
 HTTPS_PORT=8443
 PUBLIC_HTTPS_PORT=18443
+LOCAL_APP_PORT=8088
 CADDY_CONTAINER_DNS=8.8.8.8
 DUCKDNS_RESOLVER=8.8.8.8:53
 UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads
@@ -123,6 +124,7 @@ UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads
 
 접속 주소는 `https://bagfile-qa.duckdns.org:18443` 형식입니다.
 이 스크립트는 HTTPS 포트만 공개하므로, HTTP 공개가 필요하지 않다면 공유기의 18080/8088 포워딩은 끄면 됩니다.
+서버 PC에서 직접 대용량 파일을 올릴 때는 Caddy와 공유기를 거치지 않는 `http://127.0.0.1:8088` 로컬 주소를 사용하면 업로드 경로가 짧아집니다.
 
 ## DevOps 파이프라인
 

@@ -27,6 +27,7 @@ CADDY_CONTAINER_NAME="${CADDY_CONTAINER_NAME:-autodriving-sensor-qa-caddy}"
 NETWORK_NAME="${NETWORK_NAME:-autodriving-sensor-qa-net}"
 HTTPS_PORT="${HTTPS_PORT:-8443}"
 PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-18443}"
+LOCAL_APP_PORT="${LOCAL_APP_PORT:-8088}"
 CADDY_CONTAINER_DNS="${CADDY_CONTAINER_DNS:-8.8.8.8}"
 DUCKDNS_RESOLVER="${DUCKDNS_RESOLVER:-8.8.8.8:53}"
 UPLOAD_HOST_DIR="${UPLOAD_HOST_DIR:-$(pwd)/runtime/uploads}"
@@ -48,6 +49,7 @@ docker run -d \
   --name "${APP_CONTAINER_NAME}" \
   --restart unless-stopped \
   --network "${NETWORK_NAME}" \
+  -p "127.0.0.1:${LOCAL_APP_PORT}:8000" \
   -v "${UPLOAD_HOST_DIR}:${UPLOAD_CONTAINER_DIR}" \
   -e "UPLOAD_TEMP_DIR=${UPLOAD_CONTAINER_DIR}" \
   -e "MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES}" \
@@ -72,6 +74,7 @@ docker run -d \
 
 echo "HTTPS server is starting on this PC port ${HTTPS_PORT}"
 echo "Public URL: https://${PUBLIC_DOMAIN}:${PUBLIC_HTTPS_PORT}"
+echo "Fast local URL: http://127.0.0.1:${LOCAL_APP_PORT}"
 echo "Forward router external ${PUBLIC_HTTPS_PORT} -> this PC ${HTTPS_PORT}"
 echo "Upload temp directory: ${UPLOAD_HOST_DIR}"
 echo "Caddy DNS resolver: ${CADDY_CONTAINER_DNS}"
