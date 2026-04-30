@@ -34,8 +34,13 @@ def test_dashboard_renders_html():
     assert "upload-progress.js?v=3" in response.text
     assert "analysis-progress-panel" in response.text
     assert "sample_sensor_log.csv" not in response.text
-    assert "QA Score" not in response.text
-    assert "전체 이벤트" not in response.text
+    assert "QA Score" in response.text
+    assert "업로드 대기" in response.text
+    assert "전체 이벤트" in response.text
+    assert "품질 지표" in response.text
+    assert "데이터 동기화" in response.text
+    assert "주행 이벤트" in response.text
+    assert "이상 구간" in response.text
 
 
 def test_sample_dashboard_renders_analysis_result():

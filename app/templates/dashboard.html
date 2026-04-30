@@ -14,12 +14,10 @@
         <p class="eyebrow">Autonomous Driving Dataset QA</p>
         <h1>자율주행 센서 로그 품질 대시보드</h1>
       </div>
-      {% if has_result %}
       <div class="score-ring" aria-label="quality score">
-        <span>{{ summary.quality_score }}</span>
+        <span>{% if has_result %}{{ summary.quality_score }}{% else %}--{% endif %}</span>
         <small>QA Score</small>
       </div>
-      {% endif %}
     </header>
 
     <main class="layout">
@@ -60,30 +58,30 @@
       <section class="alert">{{ error }}</section>
       {% endif %}
 
-      {% if has_result %}
       <section class="summary-strip" aria-label="summary">
         <article class="stat-card">
           <span>데이터</span>
-          <strong>{{ source_name }}</strong>
+          <strong>{% if has_result %}{{ source_name }}{% else %}업로드 대기{% endif %}</strong>
         </article>
         <article class="stat-card">
           <span>형식</span>
-          <strong>{{ summary.source_type | upper }}</strong>
+          <strong>{% if has_result %}{{ summary.source_type | upper }}{% else %}CSV / BAG{% endif %}</strong>
         </article>
         <article class="stat-card">
-          <span>{% if summary.source_type == 'bag' %}메시지 수{% else %}로그 수{% endif %}</span>
-          <strong>{{ summary.total_rows }}</strong>
+          <span>{% if has_result and summary.source_type == 'bag' %}메시지 수{% elif has_result %}로그 수{% else %}로그/메시지 수{% endif %}</span>
+          <strong>{% if has_result %}{{ summary.total_rows }}{% else %}-{% endif %}</strong>
         </article>
         <article class="stat-card">
           <span>주행 시간</span>
-          <strong>{{ summary.duration_seconds }}s</strong>
+          <strong>{% if has_result %}{{ summary.duration_seconds }}s{% else %}-{% endif %}</strong>
         </article>
         <article class="stat-card">
           <span>전체 이벤트</span>
-          <strong>{{ summary.events | length }}</strong>
+          <strong>{% if has_result %}{{ summary.events | length }}{% else %}-{% endif %}</strong>
         </article>
       </section>
 
+      {% if has_result %}
       {% if summary.topic_profiles %}
       <section class="panel" data-paginated data-page-size="10">
         <div class="section-title">
@@ -229,6 +227,96 @@
           </table>
         </div>
         <div class="pagination-controls" data-pagination-controls hidden></div>
+      </section>
+      {% else %}
+      <section class="panel">
+        <div class="section-title">
+          <h2>품질 지표</h2>
+        </div>
+        <div class="metric-grid">
+          {% for metric_name in ['결측치 비율', 'timestamp 중복', 'sampling gap'] %}
+          <article class="metric-card">
+            <div class="metric-header">
+              <h3>{{ metric_name }}</h3>
+              <span class="status warn">대기</span>
+            </div>
+            <strong>-</strong>
+            <p>업로드 후 표시됩니다.</p>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel two-column">
+        <div>
+          <div class="section-title">
+            <h2>데이터 동기화</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>데이터</th>
+                  <th>상태</th>
+                  <th>평균 offset</th>
+                  <th>최대 offset</th>
+                  <th>결측</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for sensor in ['lidar', 'imu', 'camera', 'gps', 'vehicle_motion'] %}
+                <tr>
+                  <td>{{ sensor }}</td>
+                  <td><span class="status warn">대기</span></td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">
+            <h2>주행 이벤트</h2>
+          </div>
+          <div class="event-list">
+            <article class="event-item">
+              <div>
+                <strong>이벤트 없음</strong>
+                <span>-</span>
+              </div>
+              <span class="status warn">대기</span>
+              <p>업로드 후 표시됩니다.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>이상 구간</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>분류</th>
+                <th>시작</th>
+                <th>종료</th>
+                <th>심각도</th>
+                <th>내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty">업로드 후 표시됩니다.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
       {% endif %}
     </main>
