@@ -6,7 +6,10 @@
 	encode zstd gzip
 
 	tls {
-		dns duckdns {env.DUCKDNS_API_TOKEN}
+		dns duckdns {env.DUCKDNS_API_TOKEN} {
+			override_domain {$PUBLIC_DOMAIN}
+			resolver {$DUCKDNS_RESOLVER}
+		}
 	}
 
 	reverse_proxy autodriving-sensor-qa-local-server:8000

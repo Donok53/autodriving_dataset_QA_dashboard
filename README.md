@@ -104,6 +104,8 @@ PUBLIC_DOMAIN=bagfile-qa.duckdns.org
 DUCKDNS_API_TOKEN=replace_with_duckdns_token
 HTTPS_PORT=8443
 PUBLIC_HTTPS_PORT=18443
+CADDY_CONTAINER_DNS=8.8.8.8
+DUCKDNS_RESOLVER=8.8.8.8:53
 UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads
 ```
 

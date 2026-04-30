@@ -27,6 +27,8 @@ CADDY_CONTAINER_NAME="${CADDY_CONTAINER_NAME:-autodriving-sensor-qa-caddy}"
 NETWORK_NAME="${NETWORK_NAME:-autodriving-sensor-qa-net}"
 HTTPS_PORT="${HTTPS_PORT:-8443}"
 PUBLIC_HTTPS_PORT="${PUBLIC_HTTPS_PORT:-18443}"
+CADDY_CONTAINER_DNS="${CADDY_CONTAINER_DNS:-8.8.8.8}"
+DUCKDNS_RESOLVER="${DUCKDNS_RESOLVER:-8.8.8.8:53}"
 UPLOAD_HOST_DIR="${UPLOAD_HOST_DIR:-$(pwd)/runtime/uploads}"
 UPLOAD_CONTAINER_DIR="${UPLOAD_CONTAINER_DIR:-/data/uploads}"
 CADDY_DATA_DIR="${CADDY_DATA_DIR:-$(pwd)/runtime/caddy-duckdns/data}"
@@ -58,9 +60,11 @@ docker run -d \
   --name "${CADDY_CONTAINER_NAME}" \
   --restart unless-stopped \
   --network "${NETWORK_NAME}" \
+  --dns "${CADDY_CONTAINER_DNS}" \
   -p "${HTTPS_PORT}:443" \
   -e "PUBLIC_DOMAIN=${PUBLIC_DOMAIN}" \
   -e "DUCKDNS_API_TOKEN=${DUCKDNS_API_TOKEN}" \
+  -e "DUCKDNS_RESOLVER=${DUCKDNS_RESOLVER}" \
   -v "$(pwd)/deploy/Caddyfile.duckdns:/etc/caddy/Caddyfile:ro" \
   -v "${CADDY_DATA_DIR}:/data" \
   -v "${CADDY_CONFIG_DIR}:/config" \
@@ -70,3 +74,4 @@ echo "HTTPS server is starting on this PC port ${HTTPS_PORT}"
 echo "Public URL: https://${PUBLIC_DOMAIN}:${PUBLIC_HTTPS_PORT}"
 echo "Forward router external ${PUBLIC_HTTPS_PORT} -> this PC ${HTTPS_PORT}"
 echo "Upload temp directory: ${UPLOAD_HOST_DIR}"
+echo "Caddy DNS resolver: ${CADDY_CONTAINER_DNS}"
