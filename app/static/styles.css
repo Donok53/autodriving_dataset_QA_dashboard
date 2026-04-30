@@ -152,6 +152,55 @@ h1 {
   background: var(--surface-strong);
 }
 
+.progress-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.progress-row {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #344054;
+  font-size: 13px;
+}
+
+.progress-label span {
+  color: var(--muted);
+  text-align: right;
+}
+
+.progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-strong);
+}
+
+.progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+  transition: width 0.2s ease;
+}
+
+.progress-error {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .summary-strip,
 .metric-grid,
 .two-column {

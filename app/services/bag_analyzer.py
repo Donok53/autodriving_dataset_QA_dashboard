@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from bisect import bisect_left
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,20 +49,34 @@ class BagReadResult:
     gps_events: list[DrivingEvent]
 
 
-def analyze_bag(path: Path, max_messages: int = MAX_BAG_MESSAGES) -> AnalysisSummary:
+ProgressCallback = Callable[[int, str], None]
+
+
+def analyze_bag(
+    path: Path,
+    max_messages: int = MAX_BAG_MESSAGES,
+    progress_callback: ProgressCallback | None = None,
+) -> AnalysisSummary:
     if not path.exists() or path.stat().st_size == 0:
         raise InvalidBagFileError("비어 있거나 존재하지 않는 bag 파일입니다.")
 
     try:
-        read_result = read_bag(path, max_messages=max_messages)
+        _notify_progress(progress_callback, 15, "bag 메타데이터 읽는 중")
+        read_result = read_bag(path, max_messages=max_messages, progress_callback=progress_callback)
+        _notify_progress(progress_callback, 90, "분석 결과 정리 중")
     except Exception as exc:
         raise InvalidBagFileError(f"bag 파일을 읽을 수 없습니다: {exc}") from exc
 
     return build_bag_summary(read_result)
 
 
-def read_bag(path: Path, max_messages: int = MAX_BAG_MESSAGES) -> BagReadResult:
+def read_bag(
+    path: Path,
+    max_messages: int = MAX_BAG_MESSAGES,
+    progress_callback: ProgressCallback | None = None,
+) -> BagReadResult:
     with AnyReader([path]) as reader:
+        total_to_process = min(int(reader.message_count), max_messages)
         topic_by_name = {
             topic: BagTopicSeries(
                 topic=topic,
@@ -98,6 +113,13 @@ def read_bag(path: Path, max_messages: int = MAX_BAG_MESSAGES) -> BagReadResult:
                     gps_points.append(point)
 
             processed_count += 1
+            if processed_count == 1 or processed_count % 5000 == 0 or processed_count == total_to_process:
+                percent = 15 + int((processed_count / max(total_to_process, 1)) * 70)
+                _notify_progress(
+                    progress_callback,
+                    percent,
+                    f"bag 메시지 분석 중 ({processed_count:,}/{total_to_process:,})",
+                )
             if processed_count >= max_messages:
                 break
 
@@ -152,6 +174,15 @@ def infer_sensor_category(topic: str, msgtype: str) -> str:
 
 def _topic_series_sort_key(series: BagTopicSeries) -> tuple[int, str]:
     return (SENSOR_SORT_ORDER.get(series.sensor, SENSOR_SORT_ORDER["other"]), series.topic)
+
+
+def _notify_progress(
+    progress_callback: ProgressCallback | None,
+    progress: int,
+    stage: str,
+) -> None:
+    if progress_callback is not None:
+        progress_callback(progress, stage)
 
 
 def _is_vehicle_motion_topic(topic: str, msgtype: str) -> bool:

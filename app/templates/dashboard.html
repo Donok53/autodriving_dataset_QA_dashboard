@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Autodriving Sensor QA</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
-    <script src="{{ url_for('static', path='/pagination.js') }}" defer></script>
+    <script src="{{ url_for('static', path='/pagination.js') }}?v=2" defer></script>
+    <script src="{{ url_for('static', path='/upload-progress.js') }}?v=1" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -21,7 +22,7 @@
 
     <main class="layout">
       <section class="upload-panel">
-        <form action="/upload" method="post" enctype="multipart/form-data">
+        <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
           <label for="file">CSV/BAG 업로드</label>
           <input id="file" name="file" type="file" accept=".csv,.bag" required>
           <div class="upload-actions">
@@ -29,6 +30,28 @@
             <a href="/">샘플 데이터</a>
           </div>
         </form>
+      </section>
+
+      <section id="analysis-progress-panel" class="progress-panel" aria-live="polite" hidden>
+        <div class="progress-row">
+          <div class="progress-label">
+            <strong>업로드</strong>
+            <span id="upload-progress-text">대기 중</span>
+          </div>
+          <div class="progress-track" aria-label="upload progress">
+            <div id="upload-progress-bar" class="progress-fill"></div>
+          </div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-label">
+            <strong>검사</strong>
+            <span id="analysis-progress-text">대기 중</span>
+          </div>
+          <div class="progress-track" aria-label="analysis progress">
+            <div id="analysis-progress-bar" class="progress-fill"></div>
+          </div>
+        </div>
+        <p id="progress-error" class="progress-error" hidden></p>
       </section>
 
       <section class="summary-strip" aria-label="summary">
