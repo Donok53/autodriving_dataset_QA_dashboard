@@ -18,7 +18,7 @@ from app.models import (
     SensorSyncStatus,
 )
 
-EXPECTED_SENSORS = ("camera", "lidar", "imu", "gps")
+EXPECTED_SENSORS = ("camera", "lidar", "imu", "gps", "vehicle_motion")
 MAX_BAG_MESSAGES = 500_000
 MAX_EVENT_COUNT = 30
 
@@ -144,7 +144,25 @@ def infer_sensor_category(topic: str, msgtype: str) -> str:
         return "imu"
     if any(keyword in text for keyword in ("gps", "gnss", "navsat", "ublox", "fix")):
         return "gps"
+    if _is_vehicle_motion_topic(topic, msgtype):
+        return "vehicle_motion"
     return "other"
+
+
+def _is_vehicle_motion_topic(topic: str, msgtype: str) -> bool:
+    normalized_topic = topic.lower().replace("_", "/")
+    text = f"{normalized_topic} {msgtype.lower()}"
+    return any(
+        keyword in text
+        for keyword in (
+            "cmd/vel",
+            "vehicle/cmd",
+            "vehicle/command",
+            "control/cmd",
+            "ackermann",
+            "geometry_msgs/msg/twist",
+        )
+    )
 
 
 def _build_topic_profile(series: BagTopicSeries) -> BagTopicProfile:
@@ -183,10 +201,10 @@ def _build_bag_quality_metrics(
 
     return [
         QualityMetric(
-            name="센서 토픽 커버리지",
+            name="핵심 데이터 스트림 커버리지",
             status=_high_score_status(sensor_coverage),
             value=sensor_coverage,
-            detail=f"{len(EXPECTED_SENSORS)}개 핵심 센서 중 {len(present_sensors)}개 감지",
+            detail=f"{len(EXPECTED_SENSORS)}개 핵심 데이터 스트림 중 {len(present_sensors)}개 감지",
         ),
         QualityMetric(
             name="bag 메시지 처리율",
@@ -244,7 +262,7 @@ def _detect_missing_sensor_segments(
             start=_format_ns(start_time_ns),
             end=_format_ns(end_time_ns),
             severity="위험",
-            description=f"{sensor} 계열 토픽이 bag 파일에서 감지되지 않았습니다.",
+            description=f"{sensor} 계열 데이터가 bag 파일에서 감지되지 않았습니다.",
         )
         for sensor in EXPECTED_SENSORS
         if sensor not in present_sensors
@@ -317,7 +335,7 @@ def _timestamps_by_sensor(series_list: list[BagTopicSeries]) -> dict[str, list[i
 
 
 def _select_reference_sensor(timestamps_by_sensor: dict[str, list[int]]) -> str:
-    for sensor in ("lidar", "camera", "imu", "gps"):
+    for sensor in ("lidar", "camera", "imu", "gps", "vehicle_motion"):
         if sensor in timestamps_by_sensor:
             return sensor
     return "unknown"

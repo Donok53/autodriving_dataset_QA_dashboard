@@ -12,6 +12,8 @@ def test_infer_sensor_category_from_topic_and_msgtype():
     assert infer_sensor_category("/ouster/points", "sensor_msgs/msg/PointCloud2") == "lidar"
     assert infer_sensor_category("/imu/data", "sensor_msgs/msg/Imu") == "imu"
     assert infer_sensor_category("/ublox/fix", "sensor_msgs/msg/NavSatFix") == "gps"
+    assert infer_sensor_category("/cmd_vel", "geometry_msgs/msg/Twist") == "vehicle_motion"
+    assert infer_sensor_category("/cmd/vel", "geometry_msgs/msg/TwistStamped") == "vehicle_motion"
     assert infer_sensor_category("/diagnostics", "diagnostic_msgs/msg/DiagnosticArray") == "other"
 
 
@@ -47,9 +49,16 @@ def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
                     message_count=2,
                     timestamps_ns=[base, base + 1_000_000_000],
                 ),
+                BagTopicSeries(
+                    topic="/cmd_vel",
+                    msgtype="geometry_msgs/msg/Twist",
+                    sensor="vehicle_motion",
+                    message_count=5,
+                    timestamps_ns=[base + index * 100_000_000 for index in range(5)],
+                ),
             ],
-            total_message_count=22,
-            processed_message_count=22,
+            total_message_count=27,
+            processed_message_count=27,
             start_time_ns=base,
             end_time_ns=base + 1_000_000_000,
             imu_events=[
@@ -68,8 +77,8 @@ def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
     payload = summary.to_dict()
 
     assert payload["source_type"] == "bag"
-    assert payload["total_rows"] == 22
-    assert len(payload["topic_profiles"]) == 3
+    assert payload["total_rows"] == 27
+    assert len(payload["topic_profiles"]) == 4
     assert any(anomaly["category"] == "topic_gap" for anomaly in payload["anomalies"])
     assert any("camera" in anomaly["description"] for anomaly in payload["anomalies"])
     assert any(status["sensor"] == "camera" and status["status"] == "위험" for status in payload["sync_statuses"])

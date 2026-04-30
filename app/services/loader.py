@@ -3,7 +3,7 @@ from typing import IO
 
 import pandas as pd
 
-SENSOR_NAMES = ("camera", "lidar", "imu", "gps")
+SENSOR_NAMES = ("camera", "lidar", "imu", "gps", "vehicle_motion")
 
 BASE_COLUMNS = (
     "timestamp",
