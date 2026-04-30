@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autodriving Sensor QA</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Autonomous Driving Dataset QA</p>
+        <h1>자율주행 센서 로그 품질 대시보드</h1>
+      </div>
+      <div class="score-ring" aria-label="quality score">
+        <span>{{ summary.quality_score }}</span>
+        <small>QA Score</small>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="summary-strip" aria-label="summary">
+        <article class="stat-card">
+          <span>데이터</span>
+          <strong>{{ source_name }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>로그 수</span>
+          <strong>{{ summary.total_rows }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>주행 시간</span>
+          <strong>{{ summary.duration_seconds }}s</strong>
+        </article>
+        <article class="stat-card">
+          <span>이벤트</span>
+          <strong>{{ summary.events | length }}</strong>
+        </article>
+      </section>
+
+      {% if error %}
+      <section class="alert">{{ error }}</section>
+      {% endif %}
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>품질 지표</h2>
+        </div>
+        <div class="metric-grid">
+          {% for metric in summary.metrics %}
+          {% set status_class = 'good' if metric.status == '정상' else 'warn' if metric.status == '주의' else 'bad' %}
+          <article class="metric-card">
+            <div class="metric-header">
+              <h3>{{ metric.name }}</h3>
+              <span class="status {{ status_class }}">{{ metric.status }}</span>
+            </div>
+            <strong>{{ metric.value }}%</strong>
+            <p>{{ metric.detail }}</p>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel two-column">
+        <div>
+          <div class="section-title">
+            <h2>센서 동기화</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>센서</th>
+                  <th>상태</th>
+                  <th>평균 offset</th>
+                  <th>최대 offset</th>
+                  <th>결측</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for sensor in summary.sync_statuses %}
+                {% set status_class = 'good' if sensor.status == '정상' else 'warn' if sensor.status == '주의' else 'bad' %}
+                <tr>
+                  <td>{{ sensor.sensor }}</td>
+                  <td><span class="status {{ status_class }}">{{ sensor.status }}</span></td>
+                  <td>{{ sensor.mean_offset_ms }}ms</td>
+                  <td>{{ sensor.max_offset_ms }}ms</td>
+                  <td>{{ sensor.missing_count }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">
+            <h2>주행 이벤트</h2>
+          </div>
+          <div class="event-list">
+            {% for event in summary.events %}
+            {% set status_class = 'warn' if event.severity == '주의' else 'bad' %}
+            <article class="event-item">
+              <div>
+                <strong>{{ event.event_type }}</strong>
+                <span>{{ event.timestamp }}</span>
+              </div>
+              <span class="status {{ status_class }}">{{ event.severity }}</span>
+              <p>{{ event.description }}</p>
+            </article>
+            {% else %}
+            <p class="empty">탐지된 이벤트가 없습니다.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <h2>이상 구간</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>분류</th>
+                <th>시작</th>
+                <th>종료</th>
+                <th>심각도</th>
+                <th>내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for anomaly in summary.anomalies %}
+              {% set status_class = 'warn' if anomaly.severity == '주의' else 'bad' %}
+              <tr>
+                <td>{{ anomaly.category }}</td>
+                <td>{{ anomaly.start }}</td>
+                <td>{{ anomaly.end }}</td>
+                <td><span class="status {{ status_class }}">{{ anomaly.severity }}</span></td>
+                <td>{{ anomaly.description }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="5" class="empty">감지된 이상 구간이 없습니다.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
