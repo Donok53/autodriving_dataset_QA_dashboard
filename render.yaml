@@ -18,8 +18,6 @@ services:
         value: "false"
       - key: LOG_LEVEL
         value: "INFO"
-      - key: AUTO_CREATE_GITHUB_ISSUES
-        value: "false"
       - key: GITHUB_ISSUE_REPOSITORY
         value: "Donok53/autodriving_dataset_QA_dashboard"
       - key: GITHUB_ISSUE_LABELS
@@ -28,5 +26,3 @@ services:
         value: "3600"
       - key: AUTO_ISSUE_MAX_PER_RUNTIME
         value: "5"
-      - key: ENABLE_ANALYSIS_CLICK_ERROR_SCENARIO
-        value: "false"

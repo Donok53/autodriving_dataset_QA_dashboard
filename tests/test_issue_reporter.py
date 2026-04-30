@@ -1,4 +1,5 @@
 import json
+import urllib.error
 
 from app.services import issue_reporter
 
@@ -81,3 +82,35 @@ def test_issue_reporter_skips_duplicate_error_within_cooldown(monkeypatch):
     assert first_issue_url == "https://github.com/Donok53/autodriving_dataset_QA_dashboard/issues/1"
     assert second_issue_url is None
     assert call_count == 1
+
+
+def test_issue_reporter_retries_after_failed_github_request(monkeypatch):
+    issue_reporter._reset_issue_reporter_state_for_tests()
+    monkeypatch.setenv("AUTO_CREATE_GITHUB_ISSUES", "true")
+    monkeypatch.setenv("GITHUB_ISSUE_REPOSITORY", "Donok53/autodriving_dataset_QA_dashboard")
+    monkeypatch.setenv("GITHUB_ISSUE_TOKEN", "secret-token")
+    monkeypatch.setenv("GITHUB_ISSUE_LABELS", "")
+
+    call_count = 0
+
+    def fake_urlopen(request, timeout):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                403,
+                "Forbidden",
+                {},
+                None,
+            )
+        return FakeGitHubResponse()
+
+    monkeypatch.setattr(issue_reporter.urllib.request, "urlopen", fake_urlopen)
+
+    first_issue_url = issue_reporter.report_unexpected_error(RuntimeError("temporary failure"), {"stage": "request"})
+    second_issue_url = issue_reporter.report_unexpected_error(RuntimeError("temporary failure"), {"stage": "request"})
+
+    assert first_issue_url is None
+    assert second_issue_url == "https://github.com/Donok53/autodriving_dataset_QA_dashboard/issues/1"
+    assert call_count == 2

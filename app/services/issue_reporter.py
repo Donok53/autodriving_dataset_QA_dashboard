@@ -21,10 +21,16 @@ _issue_count = 0
 
 def report_unexpected_error(exc: Exception, context: dict[str, Any] | None = None) -> str | None:
     if not _auto_issue_enabled():
+        logger.warning("auto_issue_skipped reason=disabled")
         return None
 
     repository = _repository_name()
     token = os.getenv("GITHUB_ISSUE_TOKEN", "").strip()
+    logger.info(
+        "auto_issue_attempt repository_configured=%s token_configured=%s",
+        bool(repository),
+        bool(token),
+    )
     if not repository or not token:
         logger.warning("auto_issue_skipped reason=missing_github_issue_repository_or_token")
         return None
@@ -43,7 +49,10 @@ def report_unexpected_error(exc: Exception, context: dict[str, Any] | None = Non
         issue_url = _create_issue(repository, token, title, body, [])
 
     if issue_url:
+        _mark_fingerprint_reported(fingerprint)
         logger.error("auto_issue_created url=%s fingerprint=%s", issue_url, fingerprint)
+    else:
+        logger.warning("auto_issue_failed reason=no_issue_url fingerprint=%s", fingerprint)
     return issue_url
 
 
@@ -75,8 +84,6 @@ def _max_issues_per_runtime() -> int:
 
 
 def _should_skip_fingerprint(fingerprint: str) -> bool:
-    global _issue_count
-
     now = time.time()
     cooldown = _cooldown_seconds()
     max_issues = _max_issues_per_runtime()
@@ -95,9 +102,15 @@ def _should_skip_fingerprint(fingerprint: str) -> bool:
         if fingerprint in _recent_issue_fingerprints:
             return True
 
-        _recent_issue_fingerprints[fingerprint] = now
-        _issue_count += 1
         return False
+
+
+def _mark_fingerprint_reported(fingerprint: str) -> None:
+    global _issue_count
+
+    with _issue_lock:
+        _recent_issue_fingerprints[fingerprint] = time.time()
+        _issue_count += 1
 
 
 def _error_fingerprint(exc: Exception, context: dict[str, Any]) -> str:
@@ -181,7 +194,8 @@ def _create_issue(
             response_payload = json.loads(response.read().decode("utf-8"))
             return response_payload.get("html_url")
     except urllib.error.HTTPError as exc:
-        logger.warning("auto_issue_failed status=%s reason=%s", exc.code, exc.reason)
+        response_body = _read_error_response(exc)
+        logger.warning("auto_issue_failed status=%s reason=%s body=%s", exc.code, exc.reason, response_body)
     except urllib.error.URLError as exc:
         logger.warning("auto_issue_failed reason=%s", exc.reason)
     except TimeoutError:
@@ -190,6 +204,14 @@ def _create_issue(
         logger.warning("auto_issue_failed reason=invalid_github_response")
 
     return None
+
+
+def _read_error_response(exc: urllib.error.HTTPError) -> str:
+    try:
+        response_body = exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    return response_body[:500]
 
 
 def _redact_text(text: str) -> str:
