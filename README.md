@@ -89,6 +89,39 @@ UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads \
 
 DNS의 `A` 레코드는 공유기 공인 IP를 가리켜야 합니다. Caddy 인증서와 설정 데이터는 기본적으로 프로젝트의 `runtime/caddy`에 저장되며, `CADDY_DATA_DIR`, `CADDY_CONFIG_DIR` 환경 변수로 바꿀 수 있습니다.
 
+### DuckDNS DNS 인증 방식
+
+외부 80/443 포트를 사용할 수 없는 네트워크에서는 DuckDNS API token으로 DNS-01 인증을 수행합니다. 이 방식은 인증서 발급 시 외부에서 서버의 80/443 포트로 접속할 필요가 없습니다.
+
+```bash
+cp deploy/duckdns.env.example .env.duckdns
+```
+
+`.env.duckdns`에 DuckDNS token과 운영 값을 넣습니다. 이 파일은 `.gitignore`에 의해 Git에 올라가지 않습니다.
+
+```text
+PUBLIC_DOMAIN=bagfile-qa.duckdns.org
+DUCKDNS_API_TOKEN=replace_with_duckdns_token
+HTTPS_PORT=8443
+PUBLIC_HTTPS_PORT=18443
+UPLOAD_HOST_DIR=/path/to/autodriving_sensor_qa_uploads
+```
+
+실행합니다.
+
+```bash
+./scripts/run_duckdns_https_server.sh
+```
+
+공유기에서는 HTTPS 접속용 포트만 열면 됩니다.
+
+```text
+외부 TCP 18443 -> 이 PC 내부 IP:8443
+```
+
+접속 주소는 `https://bagfile-qa.duckdns.org:18443` 형식입니다.
+이 스크립트는 HTTPS 포트만 공개하므로, HTTP 공개가 필요하지 않다면 공유기의 18080/8088 포워딩은 끄면 됩니다.
+
 ## DevOps 파이프라인
 
 이 저장소는 다음 흐름으로 개발과 배포를 연결합니다.

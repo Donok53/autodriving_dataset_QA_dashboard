@@ -1,0 +1,13 @@
+{
+	auto_https disable_redirects
+}
+
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	tls {
+		dns duckdns {env.DUCKDNS_API_TOKEN}
+	}
+
+	reverse_proxy autodriving-sensor-qa-local-server:8000
+}
