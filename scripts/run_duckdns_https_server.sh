@@ -36,6 +36,8 @@ CADDY_DATA_DIR="${CADDY_DATA_DIR:-$(pwd)/runtime/caddy-duckdns/data}"
 CADDY_CONFIG_DIR="${CADDY_CONFIG_DIR:-$(pwd)/runtime/caddy-duckdns/config}"
 MAX_UPLOAD_BYTES="${MAX_UPLOAD_BYTES:-10737418240}"
 MAX_ACTIVE_UPLOAD_BYTES="${MAX_ACTIVE_UPLOAD_BYTES:-268435456000}"
+ALLOW_LOCAL_UNLIMITED_UPLOADS="${ALLOW_LOCAL_UNLIMITED_UPLOADS:-true}"
+LOCAL_UPLOAD_HOSTS="${LOCAL_UPLOAD_HOSTS:-127.0.0.1,localhost,::1}"
 
 mkdir -p "${UPLOAD_HOST_DIR}" "${CADDY_DATA_DIR}" "${CADDY_CONFIG_DIR}"
 
@@ -56,6 +58,8 @@ docker run -d \
   -e "MAX_UPLOAD_SIZE_LABEL=10GB" \
   -e "MAX_ACTIVE_UPLOAD_BYTES=${MAX_ACTIVE_UPLOAD_BYTES}" \
   -e "MAX_ACTIVE_UPLOAD_SIZE_LABEL=250GB" \
+  -e "ALLOW_LOCAL_UNLIMITED_UPLOADS=${ALLOW_LOCAL_UNLIMITED_UPLOADS}" \
+  -e "LOCAL_UPLOAD_HOSTS=${LOCAL_UPLOAD_HOSTS}" \
   "${APP_IMAGE_NAME}" >/dev/null
 
 docker run -d \
@@ -78,3 +82,4 @@ echo "Fast local URL: http://127.0.0.1:${LOCAL_APP_PORT}"
 echo "Forward router external ${PUBLIC_HTTPS_PORT} -> this PC ${HTTPS_PORT}"
 echo "Upload temp directory: ${UPLOAD_HOST_DIR}"
 echo "Caddy DNS resolver: ${CADDY_CONTAINER_DNS}"
+echo "Local upload file limit: unlimited=${ALLOW_LOCAL_UNLIMITED_UPLOADS}"

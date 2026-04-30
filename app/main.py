@@ -23,6 +23,17 @@ MAX_ACTIVE_UPLOAD_BYTES = int(os.getenv("MAX_ACTIVE_UPLOAD_BYTES", str(250 * 102
 MAX_UPLOAD_SIZE_LABEL = os.getenv("MAX_UPLOAD_SIZE_LABEL", "10GB")
 MAX_ACTIVE_UPLOAD_SIZE_LABEL = os.getenv("MAX_ACTIVE_UPLOAD_SIZE_LABEL", "250GB")
 UPLOAD_TEMP_DIR = Path(os.getenv("UPLOAD_TEMP_DIR", tempfile.gettempdir()))
+ALLOW_LOCAL_UNLIMITED_UPLOADS = os.getenv("ALLOW_LOCAL_UNLIMITED_UPLOADS", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+LOCAL_UPLOAD_HOSTS = {
+    host.strip().lower()
+    for host in os.getenv("LOCAL_UPLOAD_HOSTS", "127.0.0.1,localhost,::1").split(",")
+    if host.strip()
+}
 _upload_reservation_lock = Lock()
 _upload_reservations: dict[str, int] = {}
 templates = Jinja2Templates(directory=PROJECT_ROOT / "app" / "templates")
@@ -93,6 +104,7 @@ def _dashboard_response(
     source_name: str | None = None,
     error: str | None = None,
 ):
+    local_unlimited_upload = _is_local_unlimited_upload(request)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -101,16 +113,27 @@ def _dashboard_response(
             "source_name": source_name,
             "error": error,
             "has_result": summary is not None,
+            "upload_limit_bytes": None if local_unlimited_upload else MAX_UPLOAD_BYTES,
+            "upload_limit_label": "제한 없음" if local_unlimited_upload else MAX_UPLOAD_SIZE_LABEL,
         },
     )
 
 
+def _is_local_unlimited_upload(request: Request) -> bool:
+    if not ALLOW_LOCAL_UNLIMITED_UPLOADS:
+        return False
+
+    hostname = (request.url.hostname or "").lower()
+    return hostname in LOCAL_UPLOAD_HOSTS
+
+
 async def _analyze_uploaded_bag(request: Request, file: UploadFile):
+    enforce_size_limit = not _is_local_unlimited_upload(request)
     with _create_upload_temp_file(".bag") as temp_file:
         temp_path = Path(temp_file.name)
         total_bytes = 0
         while chunk := await file.read(UPLOAD_CHUNK_SIZE):
-            if total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
+            if enforce_size_limit and total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
                 temp_path.unlink(missing_ok=True)
                 return _dashboard_response(request, error=_upload_too_large_message())
             total_bytes += len(chunk)
@@ -127,13 +150,15 @@ async def _analyze_uploaded_bag(request: Request, file: UploadFile):
 
 @app.post("/api/upload")
 async def create_analysis_job(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ) -> JSONResponse:
     filename, suffix = _validate_upload_filename(file.filename)
+    enforce_size_limit = not _is_local_unlimited_upload(request)
 
     job = create_job(filename, suffix.removeprefix("."))
-    temp_path = await _write_upload_to_temp_file(file, suffix, job.job_id)
+    temp_path = await _write_upload_to_temp_file(file, suffix, job.job_id, enforce_size_limit)
     background_tasks.add_task(_run_analysis_job, job.job_id, temp_path, suffix)
 
     updated_job = get_job(job.job_id) or job
@@ -145,13 +170,14 @@ async def create_raw_analysis_job(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> JSONResponse:
-    content_length = _validate_content_length(request.headers.get("content-length"))
+    enforce_size_limit = not _is_local_unlimited_upload(request)
+    content_length = _validate_content_length(request.headers.get("content-length"), enforce_size_limit)
     filename, suffix = _validate_upload_filename(_filename_from_header(request))
 
     job = create_job(filename, suffix.removeprefix("."))
     _reserve_upload_bytes(job.job_id, content_length or 0)
     try:
-        temp_path = await _write_request_stream_to_temp_file(request, suffix, job.job_id)
+        temp_path = await _write_request_stream_to_temp_file(request, suffix, job.job_id, enforce_size_limit)
     except Exception:
         _release_upload_reservation(job.job_id)
         raise
@@ -202,7 +228,7 @@ def _validate_upload_filename(filename: str | None) -> tuple[str, str]:
     return clean_filename, suffix
 
 
-def _validate_content_length(raw_content_length: str | None) -> int | None:
+def _validate_content_length(raw_content_length: str | None, enforce_size_limit: bool = True) -> int | None:
     if raw_content_length is None:
         return None
 
@@ -211,7 +237,7 @@ def _validate_content_length(raw_content_length: str | None) -> int | None:
     except ValueError:
         return None
 
-    if content_length > MAX_UPLOAD_BYTES:
+    if enforce_size_limit and content_length > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail=_upload_too_large_message())
 
     return content_length
@@ -250,20 +276,30 @@ def _create_upload_temp_file(suffix: str):
     )
 
 
-async def _write_upload_to_temp_file(file: UploadFile, suffix: str, job_id: str) -> Path:
+async def _write_upload_to_temp_file(
+    file: UploadFile,
+    suffix: str,
+    job_id: str,
+    enforce_size_limit: bool = True,
+) -> Path:
     _reserve_upload_bytes(job_id, 0)
 
     async def read_next_chunk() -> bytes:
         return await file.read(UPLOAD_CHUNK_SIZE)
 
     try:
-        return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id)
+        return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id, enforce_size_limit)
     except Exception:
         _release_upload_reservation(job_id)
         raise
 
 
-async def _write_request_stream_to_temp_file(request: Request, suffix: str, job_id: str) -> Path:
+async def _write_request_stream_to_temp_file(
+    request: Request,
+    suffix: str,
+    job_id: str,
+    enforce_size_limit: bool = True,
+) -> Path:
     stream = request.stream().__aiter__()
 
     async def read_next_chunk() -> bytes:
@@ -272,10 +308,15 @@ async def _write_request_stream_to_temp_file(request: Request, suffix: str, job_
         except StopAsyncIteration:
             return b""
 
-    return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id)
+    return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id, enforce_size_limit)
 
 
-async def _write_chunks_to_temp_file(read_next_chunk, suffix: str, job_id: str) -> Path:
+async def _write_chunks_to_temp_file(
+    read_next_chunk,
+    suffix: str,
+    job_id: str,
+    enforce_size_limit: bool = True,
+) -> Path:
     temp_path: Path | None = None
     total_bytes = 0
 
@@ -284,7 +325,7 @@ async def _write_chunks_to_temp_file(read_next_chunk, suffix: str, job_id: str) 
             temp_path = Path(temp_file.name)
             update_job(job_id, status="pending", progress=3, stage="파일 저장 중")
             while chunk := await read_next_chunk():
-                if total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
+                if enforce_size_limit and total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
                     raise UploadTooLargeError
                 _reserve_upload_bytes(job_id, total_bytes + len(chunk))
                 total_bytes += len(chunk)

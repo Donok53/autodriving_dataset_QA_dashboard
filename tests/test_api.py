@@ -31,8 +31,10 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
-    assert "upload-progress.js?v=3" in response.text
+    assert "upload-progress.js?v=4" in response.text
     assert "analysis-progress-panel" in response.text
+    assert 'data-max-upload-bytes="10737418240"' in response.text
+    assert 'data-max-upload-label="10GB"' in response.text
     assert "sample_sensor_log.csv" not in response.text
     assert "QA Score" in response.text
     assert "업로드 대기" in response.text
@@ -41,6 +43,14 @@ def test_dashboard_renders_html():
     assert "데이터 동기화" in response.text
     assert "주행 이벤트" in response.text
     assert "이상 구간" in response.text
+
+
+def test_local_dashboard_skips_single_file_upload_limit():
+    response = client.get("/", headers={"host": "127.0.0.1:8088"})
+
+    assert response.status_code == 200
+    assert 'data-max-upload-bytes=""' in response.text
+    assert 'data-max-upload-label="제한 없음"' in response.text
 
 
 def test_sample_dashboard_renders_analysis_result():
@@ -132,6 +142,27 @@ def test_raw_upload_rejects_file_over_size_limit(monkeypatch):
 
     assert response.status_code == 413
     assert response.json()["detail"] == "파일은 5B 이하만 업로드할 수 있습니다."
+
+
+def test_local_raw_upload_skips_file_size_limit(monkeypatch):
+    monkeypatch.setattr(main_module, "MAX_UPLOAD_BYTES", 5)
+    monkeypatch.setattr(main_module, "MAX_UPLOAD_SIZE_LABEL", "5B")
+
+    with main_module._upload_reservation_lock:
+        main_module._upload_reservations.clear()
+
+    with open("data/sample_sensor_log.csv", "rb") as file:
+        response = client.post(
+            "/api/upload/raw",
+            content=file.read(),
+            headers={
+                "host": "127.0.0.1:8088",
+                "content-type": "application/octet-stream",
+                "x-filename": "sample_sensor_log.csv",
+            },
+        )
+
+    assert response.status_code == 200
 
 
 def test_raw_upload_rejects_when_active_storage_pool_is_full(monkeypatch):
