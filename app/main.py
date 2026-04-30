@@ -42,6 +42,11 @@ class UploadTooLargeError(ValueError):
 
 @app.get("/")
 def dashboard(request: Request):
+    return _dashboard_response(request)
+
+
+@app.get("/sample")
+def sample_dashboard(request: Request):
     summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
     return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name)
 
@@ -49,28 +54,24 @@ def dashboard(request: Request):
 @app.post("/upload")
 async def upload_log(request: Request, file: UploadFile = File(...)):
     if not file.filename:
-        summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
-        return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, "파일 이름을 확인할 수 없습니다.")
+        return _dashboard_response(request, error="파일 이름을 확인할 수 없습니다.")
 
     suffix = Path(file.filename).suffix.lower()
     if suffix not in {".csv", ".bag"}:
-        summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
-        return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, "CSV 또는 BAG 파일만 업로드할 수 있습니다.")
+        return _dashboard_response(request, error="CSV 또는 BAG 파일만 업로드할 수 있습니다.")
 
     if suffix == ".bag":
         return await _analyze_uploaded_bag(request, file)
 
     content = await file.read()
     if not content:
-        summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
-        return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, "비어 있는 파일입니다.")
+        return _dashboard_response(request, error="비어 있는 파일입니다.")
 
     try:
         summary = analyze_csv(BytesIO(content)).to_dict()
         return _dashboard_response(request, summary, file.filename)
     except InvalidSensorLogError as exc:
-        summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
-        return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, str(exc))
+        return _dashboard_response(request, error=str(exc))
 
 
 @app.get("/health")
@@ -88,8 +89,8 @@ def sample_analysis() -> dict[str, object]:
 
 def _dashboard_response(
     request: Request,
-    summary: dict[str, object],
-    source_name: str,
+    summary: dict[str, object] | None = None,
+    source_name: str | None = None,
     error: str | None = None,
 ):
     return templates.TemplateResponse(
@@ -99,6 +100,7 @@ def _dashboard_response(
             "summary": summary,
             "source_name": source_name,
             "error": error,
+            "has_result": summary is not None,
         },
     )
 
@@ -110,8 +112,7 @@ async def _analyze_uploaded_bag(request: Request, file: UploadFile):
         while chunk := await file.read(UPLOAD_CHUNK_SIZE):
             if total_bytes + len(chunk) > MAX_UPLOAD_BYTES:
                 temp_path.unlink(missing_ok=True)
-                summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
-                return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, _upload_too_large_message())
+                return _dashboard_response(request, error=_upload_too_large_message())
             total_bytes += len(chunk)
             temp_file.write(chunk)
 
@@ -119,8 +120,7 @@ async def _analyze_uploaded_bag(request: Request, file: UploadFile):
         summary = analyze_bag(temp_path).to_dict()
         return _dashboard_response(request, summary, file.filename or temp_path.name)
     except InvalidBagFileError as exc:
-        summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
-        return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, str(exc))
+        return _dashboard_response(request, error=str(exc))
     finally:
         temp_path.unlink(missing_ok=True)
 
@@ -173,15 +173,13 @@ def get_analysis_job(job_id: str) -> dict[str, object]:
 def analysis_job_result(request: Request, job_id: str):
     job = get_job(job_id)
     if job is None:
-        summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
-        return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, "분석 작업을 찾을 수 없습니다.")
+        return _dashboard_response(request, error="분석 작업을 찾을 수 없습니다.")
 
     if job.status == "completed" and job.result is not None:
         return _dashboard_response(request, job.result, job.filename)
 
-    summary = analyze_csv(SAMPLE_DATA_PATH).to_dict()
     error = job.error or f"분석이 아직 완료되지 않았습니다. 현재 단계: {job.stage}"
-    return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, error)
+    return _dashboard_response(request, error=error)
 
 
 def _filename_from_header(request: Request) -> str | None:

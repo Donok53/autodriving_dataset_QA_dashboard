@@ -29,12 +29,22 @@ def test_dashboard_renders_html():
 
     assert response.status_code == 200
     assert "자율주행 센서 로그 품질 대시보드" in response.text
-    assert "QA Score" in response.text
     assert "CSV/BAG 업로드" in response.text
-    assert "전체 이벤트" in response.text
     assert "pagination.js" in response.text
     assert "upload-progress.js?v=3" in response.text
     assert "analysis-progress-panel" in response.text
+    assert "sample_sensor_log.csv" not in response.text
+    assert "QA Score" not in response.text
+    assert "전체 이벤트" not in response.text
+
+
+def test_sample_dashboard_renders_analysis_result():
+    response = client.get("/sample")
+
+    assert response.status_code == 200
+    assert "sample_sensor_log.csv" in response.text
+    assert "QA Score" in response.text
+    assert "전체 이벤트" in response.text
     assert 'data-page-size="5"' in response.text
     assert 'data-page-size="10"' in response.text
 

@@ -14,10 +14,12 @@
         <p class="eyebrow">Autonomous Driving Dataset QA</p>
         <h1>자율주행 센서 로그 품질 대시보드</h1>
       </div>
+      {% if has_result %}
       <div class="score-ring" aria-label="quality score">
         <span>{{ summary.quality_score }}</span>
         <small>QA Score</small>
       </div>
+      {% endif %}
     </header>
 
     <main class="layout">
@@ -27,7 +29,7 @@
           <input id="file" name="file" type="file" accept=".csv,.bag" required>
           <div class="upload-actions">
             <button type="submit">분석</button>
-            <a href="/">샘플 데이터</a>
+            <a href="/sample">샘플 데이터</a>
           </div>
         </form>
       </section>
@@ -54,6 +56,11 @@
         <p id="progress-error" class="progress-error" hidden></p>
       </section>
 
+      {% if error %}
+      <section class="alert">{{ error }}</section>
+      {% endif %}
+
+      {% if has_result %}
       <section class="summary-strip" aria-label="summary">
         <article class="stat-card">
           <span>데이터</span>
@@ -76,10 +83,6 @@
           <strong>{{ summary.events | length }}</strong>
         </article>
       </section>
-
-      {% if error %}
-      <section class="alert">{{ error }}</section>
-      {% endif %}
 
       {% if summary.topic_profiles %}
       <section class="panel" data-paginated data-page-size="10">
@@ -227,6 +230,7 @@
         </div>
         <div class="pagination-controls" data-pagination-controls hidden></div>
       </section>
+      {% endif %}
     </main>
   </body>
 </html>
