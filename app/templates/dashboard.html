@@ -21,8 +21,8 @@
     <main class="layout">
       <section class="upload-panel">
         <form action="/upload" method="post" enctype="multipart/form-data">
-          <label for="file">CSV 업로드</label>
-          <input id="file" name="file" type="file" accept=".csv" required>
+          <label for="file">CSV/BAG 업로드</label>
+          <input id="file" name="file" type="file" accept=".csv,.bag" required>
           <div class="upload-actions">
             <button type="submit">분석</button>
             <a href="/">샘플 데이터</a>
@@ -36,7 +36,11 @@
           <strong>{{ source_name }}</strong>
         </article>
         <article class="stat-card">
-          <span>로그 수</span>
+          <span>형식</span>
+          <strong>{{ summary.source_type | upper }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>{% if summary.source_type == 'bag' %}메시지 수{% else %}로그 수{% endif %}</span>
           <strong>{{ summary.total_rows }}</strong>
         </article>
         <article class="stat-card">
@@ -51,6 +55,42 @@
 
       {% if error %}
       <section class="alert">{{ error }}</section>
+      {% endif %}
+
+      {% if summary.topic_profiles %}
+      <section class="panel">
+        <div class="section-title">
+          <h2>Bag 토픽 요약</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>토픽</th>
+                <th>센서</th>
+                <th>메시지 타입</th>
+                <th>메시지 수</th>
+                <th>주파수</th>
+                <th>중앙 주기</th>
+                <th>최대 gap</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for topic in summary.topic_profiles %}
+              <tr>
+                <td>{{ topic.topic }}</td>
+                <td>{{ topic.sensor }}</td>
+                <td>{{ topic.msgtype }}</td>
+                <td>{{ topic.message_count }}</td>
+                <td>{{ topic.frequency_hz }}Hz</td>
+                <td>{{ topic.median_period_ms }}ms</td>
+                <td>{{ topic.max_gap_ms }}ms</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
       {% endif %}
 
       <section class="panel">
