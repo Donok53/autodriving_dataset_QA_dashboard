@@ -96,6 +96,49 @@ def detect_gps_jump_events(
     return events
 
 
+def detect_sensor_dropout_segments(frame: pd.DataFrame) -> list[AnomalySegment]:
+    if "timestamp" not in frame.columns:
+        return []
+
+    ordered = frame.sort_values("timestamp").reset_index(drop=True)
+    segments: list[AnomalySegment] = []
+
+    for sensor in SENSOR_NAMES:
+        status_column = f"{sensor}_ok"
+        timestamp_column = f"{sensor}_timestamp"
+        if status_column not in ordered.columns and timestamp_column not in ordered.columns:
+            continue
+
+        dropout_mask = pd.Series(False, index=ordered.index)
+        if status_column in ordered.columns:
+            dropout_mask = dropout_mask | (ordered[status_column].fillna(0).astype(int) == 0)
+        if timestamp_column in ordered.columns:
+            dropout_mask = dropout_mask | ordered[timestamp_column].isna()
+
+        start_timestamp: pd.Timestamp | None = None
+        end_timestamp: pd.Timestamp | None = None
+        count = 0
+
+        for index, is_dropout in dropout_mask.items():
+            current_timestamp = ordered.loc[index, "timestamp"]
+            if is_dropout:
+                start_timestamp = start_timestamp or current_timestamp
+                end_timestamp = current_timestamp
+                count += 1
+                continue
+
+            if start_timestamp is not None and end_timestamp is not None:
+                segments.append(_make_dropout_segment(sensor, start_timestamp, end_timestamp, count))
+                start_timestamp = None
+                end_timestamp = None
+                count = 0
+
+        if start_timestamp is not None and end_timestamp is not None:
+            segments.append(_make_dropout_segment(sensor, start_timestamp, end_timestamp, count))
+
+    return segments
+
+
 def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius_meters = 6_371_000
     phi1 = math.radians(lat1)
@@ -109,6 +152,21 @@ def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> flo
     )
     angular_distance = 2 * math.atan2(math.sqrt(square_half_chord), math.sqrt(1 - square_half_chord))
     return radius_meters * angular_distance
+
+
+def _make_dropout_segment(
+    sensor: str,
+    start_timestamp: pd.Timestamp,
+    end_timestamp: pd.Timestamp,
+    count: int,
+) -> AnomalySegment:
+    return AnomalySegment(
+        category="sensor_dropout",
+        start=_format_timestamp(start_timestamp),
+        end=_format_timestamp(end_timestamp),
+        severity="주의" if count < 3 else "위험",
+        description=f"{sensor} 센서 dropout이 {count}개 로그에서 감지되었습니다.",
+    )
 
 
 def _format_timestamp(value: pd.Timestamp) -> str:
