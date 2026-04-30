@@ -1,10 +1,12 @@
 import asyncio
 from contextlib import asynccontextmanager
 from io import BytesIO
+import logging
 import os
 import tempfile
 from pathlib import Path
 from threading import Lock
+import time
 from urllib.parse import unquote
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
@@ -14,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.services.bag_analyzer import InvalidBagFileError, analyze_bag
 from app.services.analyzer import InvalidSensorLogError, analyze_csv
+from app.services.issue_reporter import report_unexpected_error
 from app.services.job_store import create_job, get_job, update_job
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +42,19 @@ LOCAL_UPLOAD_HOSTS = {
 _upload_reservation_lock = Lock()
 _upload_reservations: dict[str, int] = {}
 templates = Jinja2Templates(directory=PROJECT_ROOT / "app" / "templates")
+logger = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+
+_configure_logging()
 
 
 @asynccontextmanager
@@ -59,6 +75,50 @@ app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), nam
 
 class UploadTooLargeError(ValueError):
     pass
+
+
+@app.middleware("http")
+async def log_request(request: Request, call_next):
+    request_id = request.headers.get("rndr-id") or request.headers.get("x-request-id") or "-"
+    start_time = time.perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        logger.exception(
+            "request_failed method=%s path=%s duration_ms=%s request_id=%s",
+            request.method,
+            request.url.path,
+            duration_ms,
+            request_id,
+        )
+        report_unexpected_error(
+            exc,
+            {
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "stage": "request",
+            },
+        )
+        raise
+
+    duration_ms = int((time.perf_counter() - start_time) * 1000)
+    log_method = logger.info
+    if response.status_code >= 500:
+        log_method = logger.error
+    elif response.status_code >= 400:
+        log_method = logger.warning
+    log_method(
+        "request_completed method=%s path=%s status_code=%s duration_ms=%s request_id=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        request_id,
+    )
+    return response
 
 
 @app.get("/")
@@ -168,6 +228,7 @@ async def create_analysis_job(
     enforce_size_limit = not _is_local_unlimited_upload(request)
 
     job = create_job(filename, suffix.removeprefix("."))
+    logger.info("analysis_job_created job_id=%s source_type=%s upload_mode=form", job.job_id, job.source_type)
     temp_path = await _write_upload_to_temp_file(file, suffix, job.job_id, enforce_size_limit)
     background_tasks.add_task(_run_analysis_job, job.job_id, temp_path, suffix)
 
@@ -185,6 +246,7 @@ async def create_raw_analysis_job(
     filename, suffix = _validate_upload_filename(_filename_from_header(request))
 
     job = create_job(filename, suffix.removeprefix("."))
+    logger.info("analysis_job_created job_id=%s source_type=%s upload_mode=raw", job.job_id, job.source_type)
     _reserve_upload_bytes(job.job_id, content_length or 0)
     try:
         temp_path = await _write_request_stream_to_temp_file(request, suffix, job.job_id, enforce_size_limit)
@@ -429,6 +491,7 @@ async def _write_chunks_to_temp_file(
 
 def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
     try:
+        logger.info("analysis_job_started job_id=%s source_type=%s", job_id, suffix.removeprefix("."))
         if suffix == ".csv":
             update_job(job_id, status="running", progress=25, stage="CSV 로딩 및 스키마 검사 중")
             summary = analyze_csv(temp_path).to_dict()
@@ -445,9 +508,29 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
             ).to_dict()
 
         update_job(job_id, status="completed", progress=100, stage="분석 완료", result=summary)
+        logger.info("analysis_job_completed job_id=%s source_type=%s", job_id, suffix.removeprefix("."))
     except (InvalidSensorLogError, InvalidBagFileError) as exc:
+        logger.warning(
+            "analysis_job_failed job_id=%s source_type=%s reason=invalid_input error=%s",
+            job_id,
+            suffix.removeprefix("."),
+            exc,
+        )
         update_job(job_id, status="failed", progress=100, stage="분석 실패", error=str(exc))
     except Exception as exc:
+        logger.exception(
+            "analysis_job_failed job_id=%s source_type=%s reason=unexpected",
+            job_id,
+            suffix.removeprefix("."),
+        )
+        report_unexpected_error(
+            exc,
+            {
+                "job_id": job_id,
+                "source_type": suffix.removeprefix("."),
+                "stage": "analysis_job",
+            },
+        )
         update_job(job_id, status="failed", progress=100, stage="분석 실패", error=f"예상하지 못한 오류: {exc}")
     finally:
         temp_path.unlink(missing_ok=True)

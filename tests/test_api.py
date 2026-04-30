@@ -245,3 +245,35 @@ def test_async_upload_rejects_unsupported_file_type():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "CSV 또는 BAG 파일만 업로드할 수 있습니다."
+
+
+def test_unexpected_analysis_failure_reports_issue(tmp_path, monkeypatch):
+    job = main_module.create_job("private_dataset.csv", "csv")
+    temp_path = tmp_path / "input.csv"
+    temp_path.write_text("broken", encoding="utf-8")
+
+    def raise_unexpected_error(path):
+        raise RuntimeError("unexpected parser crash")
+
+    captured = {}
+    monkeypatch.setattr(main_module, "analyze_csv", raise_unexpected_error)
+    monkeypatch.setattr(
+        main_module,
+        "report_unexpected_error",
+        lambda exc, context: captured.update({"exc": exc, "context": context}) or None,
+    )
+
+    main_module._run_analysis_job(job.job_id, temp_path, ".csv")
+
+    updated_job = main_module.get_job(job.job_id)
+    assert updated_job is not None
+    assert updated_job.status == "failed"
+    assert updated_job.stage == "분석 실패"
+    assert "예상하지 못한 오류" in (updated_job.error or "")
+    assert not temp_path.exists()
+    assert isinstance(captured["exc"], RuntimeError)
+    assert captured["context"] == {
+        "job_id": job.job_id,
+        "source_type": "csv",
+        "stage": "analysis_job",
+    }

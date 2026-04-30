@@ -16,3 +16,15 @@ services:
         value: "300MB"
       - key: ALLOW_LOCAL_UNLIMITED_UPLOADS
         value: "false"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: AUTO_CREATE_GITHUB_ISSUES
+        value: "false"
+      - key: GITHUB_ISSUE_REPOSITORY
+        value: "Donok53/autodriving_dataset_QA_dashboard"
+      - key: GITHUB_ISSUE_LABELS
+        value: "bug"
+      - key: AUTO_ISSUE_COOLDOWN_SECONDS
+        value: "3600"
+      - key: AUTO_ISSUE_MAX_PER_RUNTIME
+        value: "5"

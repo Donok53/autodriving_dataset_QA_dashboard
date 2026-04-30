@@ -111,6 +111,25 @@ Render 무료 인스턴스의 주요 제약은 다음과 같습니다.
 - 재시작, redeploy, sleep 이후 로컬 임시 파일 유지 보장 없음
 - 무료 Web Service는 persistent disk 미지원
 
+## 운영 로그와 자동 이슈 생성
+
+애플리케이션은 요청 처리, 업로드 작업, 분석 작업의 주요 상태를 표준 로그로 남깁니다. Render에서는 서비스의 Logs 화면에서 `error`, `warning`, `job_id`, `request_id` 같은 키워드로 검색할 수 있습니다.
+
+예상하지 못한 서버 오류가 발생했을 때 GitHub issue를 자동으로 만들고 싶다면 Render 환경 변수에 아래 값을 추가합니다. 잘못된 파일 업로드나 스키마 오류처럼 사용자가 만든 입력 오류는 Render 로그에만 남기고, GitHub issue는 만들지 않습니다.
+
+```text
+AUTO_CREATE_GITHUB_ISSUES=true
+GITHUB_ISSUE_REPOSITORY=Donok53/autodriving_dataset_QA_dashboard
+GITHUB_ISSUE_TOKEN=github_pat_...
+GITHUB_ISSUE_LABELS=bug
+AUTO_ISSUE_COOLDOWN_SECONDS=3600
+AUTO_ISSUE_MAX_PER_RUNTIME=5
+```
+
+`GITHUB_ISSUE_TOKEN`은 GitHub fine-grained personal access token을 사용하고, 대상 저장소에 대한 Issues 읽기/쓰기 권한만 부여합니다. 이 값은 Render의 Secret 환경 변수로만 저장하고 Git에 커밋하지 않습니다.
+
+자동 이슈에는 오류 타입, Render 서비스명, 배포 commit, job/request context, traceback이 포함됩니다. 업로드 파일명과 임시 파일 경로는 공개 issue에 노출되지 않도록 제외하거나 축약합니다.
+
 ## 분석 항목
 
 파일 업로드 시 브라우저에서 업로드 진행률을 표시하고, 서버 분석은 인메모리 job 상태를 통해 검사 진행률을 표시합니다. 분석이 끝나면 완료된 job 결과 페이지로 이동합니다.
