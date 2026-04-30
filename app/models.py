@@ -49,6 +49,20 @@ class DrivingEvent:
 
 
 @dataclass(frozen=True)
+class BagTopicProfile:
+    topic: str
+    sensor: str
+    msgtype: str
+    message_count: int
+    frequency_hz: float
+    median_period_ms: float
+    max_gap_ms: float
+
+    def to_dict(self) -> dict[str, str | float | int]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class AnalysisSummary:
     total_rows: int
     duration_seconds: float
@@ -57,9 +71,12 @@ class AnalysisSummary:
     sync_statuses: list[SensorSyncStatus]
     anomalies: list[AnomalySegment]
     events: list[DrivingEvent]
+    source_type: str = "csv"
+    topic_profiles: list[BagTopicProfile] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "source_type": self.source_type,
             "total_rows": self.total_rows,
             "duration_seconds": self.duration_seconds,
             "quality_score": self.quality_score,
@@ -67,4 +84,7 @@ class AnalysisSummary:
             "sync_statuses": [status.to_dict() for status in self.sync_statuses],
             "anomalies": [anomaly.to_dict() for anomaly in self.anomalies],
             "events": [event.to_dict() for event in self.events],
+            "topic_profiles": [
+                profile.to_dict() for profile in self.topic_profiles or []
+            ],
         }
