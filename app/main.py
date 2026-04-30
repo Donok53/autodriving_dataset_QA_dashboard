@@ -65,9 +65,9 @@ def _dashboard_response(
     error: str | None = None,
 ):
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
-            "request": request,
             "summary": summary,
             "source_name": source_name,
             "error": error,
