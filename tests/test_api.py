@@ -31,7 +31,7 @@ def test_dashboard_renders_html():
     assert "CSV/BAG 업로드" in response.text
     assert "전체 이벤트" in response.text
     assert "pagination.js" in response.text
-    assert "upload-progress.js" in response.text
+    assert "upload-progress.js?v=2" in response.text
     assert "analysis-progress-panel" in response.text
     assert 'data-page-size="5"' in response.text
     assert 'data-page-size="10"' in response.text
@@ -55,6 +55,33 @@ def test_async_csv_upload_job_completes_and_renders_result():
         response = client.post(
             "/api/upload",
             files={"file": ("sample_sensor_log.csv", file, "text/csv")},
+        )
+
+    assert response.status_code == 200
+    job = response.json()
+    assert job["job_id"]
+    assert job["source_type"] == "csv"
+
+    status_response = client.get(f"/api/jobs/{job['job_id']}")
+    assert status_response.status_code == 200
+    status_payload = status_response.json()
+    assert status_payload["status"] == "completed"
+    assert status_payload["progress"] == 100
+
+    result_response = client.get(f"/jobs/{job['job_id']}")
+    assert result_response.status_code == 200
+    assert "sample_sensor_log.csv" in result_response.text
+
+
+def test_raw_csv_upload_job_completes_and_renders_result():
+    with open("data/sample_sensor_log.csv", "rb") as file:
+        response = client.post(
+            "/api/upload/raw",
+            content=file.read(),
+            headers={
+                "content-type": "application/octet-stream",
+                "x-filename": "sample_sensor_log.csv",
+            },
         )
 
     assert response.status_code == 200

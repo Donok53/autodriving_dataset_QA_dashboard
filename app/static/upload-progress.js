@@ -53,14 +53,22 @@ async function pollAnalysisJob(jobId) {
 
 function uploadWithProgress(form) {
   const request = new XMLHttpRequest();
-  const formData = new FormData(form);
+  const fileInput = form.querySelector("input[type='file']");
+  const file = fileInput?.files?.[0];
+
+  if (!file) {
+    setProgressError("업로드할 파일을 선택해주세요.");
+    return;
+  }
 
   resetProgressPanel();
   if (submitButton) {
     submitButton.disabled = true;
   }
 
-  request.open("POST", "/api/upload");
+  request.open("POST", "/api/upload/raw");
+  request.setRequestHeader("Content-Type", "application/octet-stream");
+  request.setRequestHeader("X-Filename", encodeURIComponent(file.name));
 
   request.upload.addEventListener("progress", (event) => {
     if (!event.lengthComputable) {
@@ -92,7 +100,7 @@ function uploadWithProgress(form) {
     setProgressError("네트워크 오류로 업로드에 실패했습니다.");
   });
 
-  request.send(formData);
+  request.send(file);
 }
 
 if (uploadForm && progressPanel) {

@@ -1,6 +1,7 @@
 from io import BytesIO
 import tempfile
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -13,6 +14,8 @@ from app.services.job_store import create_job, get_job, update_job
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_sensor_log.csv"
+SUPPORTED_UPLOAD_SUFFIXES = {".csv", ".bag"}
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 templates = Jinja2Templates(directory=PROJECT_ROOT / "app" / "templates")
 
 app = FastAPI(
@@ -108,16 +111,25 @@ async def create_analysis_job(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ) -> JSONResponse:
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="파일 이름을 확인할 수 없습니다.")
+    filename, suffix = _validate_upload_filename(file.filename)
 
-    suffix = Path(file.filename).suffix.lower()
-    if suffix not in {".csv", ".bag"}:
-        raise HTTPException(status_code=400, detail="CSV 또는 BAG 파일만 업로드할 수 있습니다.")
-
-    source_type = suffix.removeprefix(".")
-    job = create_job(file.filename, source_type)
+    job = create_job(filename, suffix.removeprefix("."))
     temp_path = await _write_upload_to_temp_file(file, suffix, job.job_id)
+    background_tasks.add_task(_run_analysis_job, job.job_id, temp_path, suffix)
+
+    updated_job = get_job(job.job_id) or job
+    return JSONResponse(updated_job.to_dict())
+
+
+@app.post("/api/upload/raw")
+async def create_raw_analysis_job(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> JSONResponse:
+    filename, suffix = _validate_upload_filename(_filename_from_header(request))
+
+    job = create_job(filename, suffix.removeprefix("."))
+    temp_path = await _write_request_stream_to_temp_file(request, suffix, job.job_id)
     background_tasks.add_task(_run_analysis_job, job.job_id, temp_path, suffix)
 
     updated_job = get_job(job.job_id) or job
@@ -147,21 +159,82 @@ def analysis_job_result(request: Request, job_id: str):
     return _dashboard_response(request, summary, SAMPLE_DATA_PATH.name, error)
 
 
+def _filename_from_header(request: Request) -> str | None:
+    raw_filename = request.headers.get("x-filename")
+    if raw_filename is None:
+        return None
+    decoded_filename = unquote(raw_filename)
+    return decoded_filename.replace("\\", "/").split("/")[-1]
+
+
+def _validate_upload_filename(filename: str | None) -> tuple[str, str]:
+    if not filename:
+        raise HTTPException(status_code=400, detail="파일 이름을 확인할 수 없습니다.")
+
+    clean_filename = filename.strip()
+    suffix = Path(clean_filename).suffix.lower()
+    if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
+        raise HTTPException(status_code=400, detail="CSV 또는 BAG 파일만 업로드할 수 있습니다.")
+
+    return clean_filename, suffix
+
+
 async def _write_upload_to_temp_file(file: UploadFile, suffix: str, job_id: str) -> Path:
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
-        temp_path = Path(temp_file.name)
-        total_bytes = 0
-        update_job(job_id, status="pending", progress=3, stage="파일 저장 중")
-        while chunk := await file.read(1024 * 1024):
-            total_bytes += len(chunk)
-            temp_file.write(chunk)
+    async def read_next_chunk() -> bytes:
+        return await file.read(UPLOAD_CHUNK_SIZE)
+
+    return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id)
+
+
+async def _write_request_stream_to_temp_file(request: Request, suffix: str, job_id: str) -> Path:
+    stream = request.stream().__aiter__()
+
+    async def read_next_chunk() -> bytes:
+        try:
+            return await stream.__anext__()
+        except StopAsyncIteration:
+            return b""
+
+    return await _write_chunks_to_temp_file(read_next_chunk, suffix, job_id)
+
+
+async def _write_chunks_to_temp_file(read_next_chunk, suffix: str, job_id: str) -> Path:
+    temp_path: Path | None = None
+    total_bytes = 0
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+            temp_path = Path(temp_file.name)
+            update_job(job_id, status="pending", progress=3, stage="파일 저장 중")
+            while chunk := await read_next_chunk():
+                total_bytes += len(chunk)
+                temp_file.write(chunk)
+
+    except OSError as exc:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        update_job(
+            job_id,
+            status="failed",
+            progress=100,
+            stage="업로드 실패",
+            error="임시 저장 공간이 부족합니다. 디스크 용량을 확보한 뒤 다시 업로드해주세요.",
+        )
+        raise HTTPException(
+            status_code=507,
+            detail="임시 저장 공간이 부족합니다. 디스크 용량을 확보한 뒤 다시 업로드해주세요.",
+        ) from exc
 
     if total_bytes == 0:
+        if temp_path is None:
+            raise HTTPException(status_code=400, detail="비어 있는 파일입니다.")
         temp_path.unlink(missing_ok=True)
         update_job(job_id, status="failed", progress=100, stage="업로드 실패", error="비어 있는 파일입니다.")
         raise HTTPException(status_code=400, detail="비어 있는 파일입니다.")
 
     update_job(job_id, status="running", progress=10, stage="분석 작업 대기 중")
+    if temp_path is None:
+        raise HTTPException(status_code=500, detail="임시 파일을 생성하지 못했습니다.")
     return temp_path
 
 
