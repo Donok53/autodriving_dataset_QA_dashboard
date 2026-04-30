@@ -59,3 +59,48 @@ Git push
 CI 워크플로는 `.github/workflows/ci.yml`에 정의되어 있으며, push 또는 pull request가 발생하면 테스트와 Docker 빌드 검증을 자동으로 수행합니다.
 
 Render 배포는 `render.yaml`을 기준으로 Docker Web Service를 생성하고, `/health` 엔드포인트를 health check로 사용합니다.
+
+## 분석 항목
+
+- 결측치 비율
+- timestamp 중복
+- sampling gap
+- 센서 timestamp 동기화 offset
+- 센서 dropout 구간
+- 급가속 및 급제동 이벤트
+- GPS 위치 jump 이벤트
+
+## CSV 스키마
+
+샘플 데이터는 `data/sample_sensor_log.csv`에 포함되어 있습니다.
+
+| 컬럼 | 설명 |
+| --- | --- |
+| `timestamp` | 기준 로그 timestamp |
+| `speed_mps` | 차량 속도 |
+| `accel_mps2` | 차량 가속도 |
+| `latitude`, `longitude` | GPS 좌표 |
+| `camera_timestamp`, `lidar_timestamp`, `radar_timestamp`, `imu_timestamp`, `gps_timestamp` | 센서별 timestamp |
+| `camera_ok`, `lidar_ok`, `radar_ok`, `imu_ok`, `gps_ok` | 센서별 수집 상태 |
+
+## 프로젝트 구조
+
+```text
+app/
+  main.py                  FastAPI 엔트리포인트
+  models.py                분석 결과 모델
+  services/
+    analyzer.py            통합 분석 파이프라인
+    loader.py              CSV 로딩 및 정규화
+    quality_checker.py     품질 검사
+    sync_checker.py        센서 동기화 분석
+    event_detector.py      주행 이벤트 탐지
+  templates/
+  static/
+data/
+  sample_sensor_log.csv
+tests/
+.github/workflows/ci.yml
+Dockerfile
+render.yaml
+```
