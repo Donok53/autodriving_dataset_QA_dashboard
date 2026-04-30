@@ -276,7 +276,16 @@ async def create_raw_analysis_job(
     background_tasks: BackgroundTasks,
 ) -> JSONResponse:
     if _should_trigger_analysis_click_error_scenario(request):
-        raise RuntimeError("intentional runtime error after repeated analysis button clicks")
+        try:
+            raise RuntimeError("intentional runtime error after repeated analysis button clicks")
+        except RuntimeError as exc:
+            logger.exception("analysis_click_error_scenario_triggered path=%s", request.url.path)
+            _report_request_exception(
+                request,
+                exc,
+                request.headers.get("rndr-id") or request.headers.get("x-request-id") or "-",
+            )
+            raise
 
     enforce_size_limit = not _is_local_unlimited_upload(request)
     content_length = _validate_content_length(request.headers.get("content-length"), enforce_size_limit)
