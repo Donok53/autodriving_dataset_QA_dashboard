@@ -17,3 +17,29 @@
 - Pytest
 - Docker
 - GitHub Actions
+
+## 로컬 실행
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+브라우저에서 `http://127.0.0.1:8000`으로 접속합니다.
+
+## 테스트 실행
+
+```bash
+pytest
+```
+
+## Docker 실행
+
+```bash
+docker build -t autodriving-sensor-qa .
+docker run --rm -p 8000:8000 autodriving-sensor-qa
+```
+
+컨테이너 실행 후 `http://127.0.0.1:8000/health`에서 상태를 확인할 수 있습니다.
