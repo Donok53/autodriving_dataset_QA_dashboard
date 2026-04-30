@@ -18,7 +18,7 @@ from app.models import (
     SensorSyncStatus,
 )
 
-EXPECTED_SENSORS = ("camera", "lidar", "radar", "imu", "gps")
+EXPECTED_SENSORS = ("camera", "lidar", "imu", "gps")
 MAX_BAG_MESSAGES = 500_000
 MAX_EVENT_COUNT = 30
 
@@ -140,8 +140,6 @@ def infer_sensor_category(topic: str, msgtype: str) -> str:
         return "camera"
     if any(keyword in text for keyword in ("lidar", "velodyne", "ouster", "pointcloud", "pointcloud2", "points")):
         return "lidar"
-    if "radar" in text:
-        return "radar"
     if "imu" in text:
         return "imu"
     if any(keyword in text for keyword in ("gps", "gnss", "navsat", "ublox", "fix")):
@@ -319,7 +317,7 @@ def _timestamps_by_sensor(series_list: list[BagTopicSeries]) -> dict[str, list[i
 
 
 def _select_reference_sensor(timestamps_by_sensor: dict[str, list[int]]) -> str:
-    for sensor in ("lidar", "camera", "imu", "gps", "radar"):
+    for sensor in ("lidar", "camera", "imu", "gps"):
         if sensor in timestamps_by_sensor:
             return sensor
     return "unknown"

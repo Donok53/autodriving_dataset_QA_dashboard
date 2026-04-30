@@ -12,7 +12,6 @@ def test_infer_sensor_category_from_topic_and_msgtype():
     assert infer_sensor_category("/ouster/points", "sensor_msgs/msg/PointCloud2") == "lidar"
     assert infer_sensor_category("/imu/data", "sensor_msgs/msg/Imu") == "imu"
     assert infer_sensor_category("/ublox/fix", "sensor_msgs/msg/NavSatFix") == "gps"
-    assert infer_sensor_category("/radar/tracks", "custom_msgs/msg/RadarTrack") == "radar"
     assert infer_sensor_category("/diagnostics", "diagnostic_msgs/msg/DiagnosticArray") == "other"
 
 
@@ -21,13 +20,6 @@ def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
     summary = build_bag_summary(
         BagReadResult(
             topic_series=[
-                BagTopicSeries(
-                    topic="/camera/front/image_raw",
-                    msgtype="sensor_msgs/msg/Image",
-                    sensor="camera",
-                    message_count=5,
-                    timestamps_ns=[base + index * 100_000_000 for index in range(5)],
-                ),
                 BagTopicSeries(
                     topic="/ouster/points",
                     msgtype="sensor_msgs/msg/PointCloud2",
@@ -77,8 +69,8 @@ def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
 
     assert payload["source_type"] == "bag"
     assert payload["total_rows"] == 22
-    assert len(payload["topic_profiles"]) == 4
+    assert len(payload["topic_profiles"]) == 3
     assert any(anomaly["category"] == "topic_gap" for anomaly in payload["anomalies"])
-    assert any("radar" in anomaly["description"] for anomaly in payload["anomalies"])
-    assert any(status["sensor"] == "radar" and status["status"] == "위험" for status in payload["sync_statuses"])
+    assert any("camera" in anomaly["description"] for anomaly in payload["anomalies"])
+    assert any(status["sensor"] == "camera" and status["status"] == "위험" for status in payload["sync_statuses"])
     assert payload["events"][0]["event_type"] == "bag_imu_acceleration"
