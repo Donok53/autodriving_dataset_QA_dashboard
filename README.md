@@ -21,101 +21,89 @@
 - GitHub Actions
 - Render
 
-## 로컬 실행
+## 빠른 시작
+
+이 프로젝트의 기본 실행 방식은 Docker입니다. Windows, macOS, Linux, WSL 모두 같은 컨테이너 환경으로 실행할 수 있어 Python 버전과 패키지 설치 차이를 줄일 수 있습니다.
+
+### 준비
+
+- Windows/macOS: Docker Desktop 설치
+- Linux/WSL: Docker Engine 또는 Docker Desktop WSL integration 사용
+
+### 실행
+
+```bash
+git clone https://github.com/Donok53/autodriving_dataset_QA_dashboard.git
+cd autodriving_dataset_QA_dashboard
+
+docker build -t autodriving-sensor-qa .
+docker run --rm -p 8000:8000 autodriving-sensor-qa
+```
+
+브라우저에서 `http://localhost:8000`으로 접속합니다.
+
+상태 확인은 아래 주소에서 할 수 있습니다.
+
+```text
+http://localhost:8000/health
+```
+
+## 개발 및 테스트
+
+코드를 수정하거나 테스트를 직접 실행할 때만 Python 가상환경을 사용합니다.
+
+### macOS/Linux/WSL
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+
+pytest
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-브라우저에서 `http://127.0.0.1:8000`으로 접속합니다.
-
-### Ubuntu/WSL 가상환경 설정
-
-Ubuntu, Debian, WSL 환경에서 `pip install -r requirements.txt` 실행 시 `externally-managed-environment` 오류가 발생할 수 있습니다. 이는 시스템 Python 환경을 보호하기 위한 정책이므로, 시스템 Python에 직접 패키지를 설치하지 않고 가상환경을 사용합니다.
+Ubuntu, Debian, WSL에서 `externally-managed-environment` 오류가 발생하면 아래 패키지를 설치한 뒤 다시 가상환경을 생성합니다.
 
 ```bash
 sudo apt update
 sudo apt install -y python3-full python3-venv
+```
 
-python3 -m venv .venv
-source .venv/bin/activate
+### Windows PowerShell
 
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+
+pytest
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-`--break-system-packages` 옵션은 시스템 Python 환경에 영향을 줄 수 있으므로 사용하지 않는 것을 권장합니다.
+<details>
+<summary>WSL에서 Uvicorn은 실행되는데 브라우저 접속이 안 될 때</summary>
 
-### WSL 접속 확인
-
-WSL에서 아래처럼 Uvicorn이 실행되더라도 `0.0.0.0`은 브라우저 접속 주소가 아니라 모든 네트워크 인터페이스에서 요청을 받겠다는 의미입니다.
-
-```text
-Uvicorn running on http://0.0.0.0:8000
-```
-
-먼저 WSL 터미널 안에서 서버가 정상 응답하는지 확인합니다.
+`0.0.0.0`은 접속 주소가 아니라 모든 네트워크 인터페이스에서 요청을 받겠다는 의미입니다. 먼저 WSL 터미널 안에서 서버가 정상 응답하는지 확인합니다.
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-정상 응답 예시는 다음과 같습니다.
-
-```json
-{"status":"ok"}
-```
-
-WSL 내부에서는 정상인데 Windows 브라우저에서 접속이 안 되면 다음 주소를 차례대로 확인합니다.
-
-```text
-http://localhost:8000
-http://127.0.0.1:8000
-```
-
-그래도 접속이 안 되면 WSL IP를 확인합니다.
+정상이라면 Windows 브라우저에서 `http://localhost:8000` 또는 `http://127.0.0.1:8000`으로 접속합니다. 그래도 안 되면 WSL IP를 확인합니다.
 
 ```bash
 hostname -I
 ```
 
-출력된 IP를 사용해 Windows 브라우저에서 다음 형식으로 접속합니다.
+출력된 IP를 사용해 Windows 브라우저에서 `http://WSL_IP:8000` 형식으로 접속합니다.
 
-```text
-http://WSL_IP:8000
-```
+</details>
 
-포트가 실제로 열려 있는지도 확인할 수 있습니다.
-
-```bash
-ss -ltnp | grep 8000
-```
-
-위 확인이 모두 정상인데도 접속되지 않으면 Windows 방화벽, VPN, WSL 네트워크 설정이 원인일 수 있습니다. 포트 충돌이 의심될 때는 다른 포트로 실행합니다.
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8001
-```
-
-## 테스트 실행
-
-```bash
-pytest
-```
-
-## Docker 실행
-
-```bash
-docker build -t autodriving-sensor-qa .
-docker run --rm -p 8000:8000 autodriving-sensor-qa
-```
-
-컨테이너 실행 후 `http://127.0.0.1:8000/health`에서 상태를 확인할 수 있습니다.
-
-## 로컬 서버 운영
+<details>
+<summary>대용량 bag 파일을 로컬에서 검증할 때</summary>
 
 대용량 bag 업로드를 로컬에서 테스트할 때는 SSD/NVMe 경로에 임시 저장하는 구성을 권장합니다. 기본값은 프로젝트의 `runtime/uploads`입니다.
 
@@ -123,12 +111,7 @@ docker run --rm -p 8000:8000 autodriving-sensor-qa
 ./scripts/run_local_server.sh
 ```
 
-기본 설정은 업로드 파일 1개당 10GB, 동시 업로드 임시 저장소 250GB입니다.
-임시 파일은 `UPLOAD_HOST_DIR`에 저장되고, 분석 완료 후 삭제됩니다. `UPLOAD_HOST_DIR`을 지정하지 않으면 프로젝트의 `runtime/uploads`를 사용합니다. 원본 bag 파일과 임시 저장소를 같은 HDD에 두면 읽기와 쓰기가 겹쳐 느려질 수 있으므로, 대용량 테스트는 SSD/NVMe 임시 저장소를 우선 사용합니다.
-
-```text
-http://127.0.0.1:8000
-```
+기본 설정은 업로드 파일 1개당 10GB, 동시 업로드 임시 저장소 250GB입니다. 임시 파일은 분석 완료 후 삭제됩니다.
 
 포트나 저장 위치를 바꾸려면 실행 전에 환경 변수를 지정합니다.
 
@@ -138,12 +121,7 @@ UPLOAD_HOST_DIR=./runtime/uploads \
 ./scripts/run_local_server.sh
 ```
 
-디스크 여유 공간이 더 중요하고 속도 저하를 감수할 수 있다면 HDD 경로를 지정할 수 있습니다.
-
-```bash
-UPLOAD_HOST_DIR=/media/byeongjae/HDD00/autodriving_sensor_qa_uploads \
-./scripts/run_local_server.sh
-```
+</details>
 
 ## DevOps 파이프라인
 
