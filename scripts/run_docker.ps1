@@ -26,10 +26,49 @@ function Test-PortAvailable {
     }
 }
 
-function Find-AvailablePort {
+function Test-DockerPortConflict {
+    param(
+        [string]$Output,
+        [int]$Port
+    )
+
+    return (
+        $Output -match "port is already allocated" -or
+        $Output -match "Bind for 0\.0\.0\.0:$Port failed" -or
+        $Output -match "Ports are not available"
+    )
+}
+
+function Invoke-DockerRunWithAvailablePort {
     for ($port = $StartPort; $port -le $MaxPort; $port++) {
-        if (Test-PortAvailable -Port $port) {
-            return $port
+        if (-not (Test-PortAvailable -Port $port)) {
+            Write-Host "Port $port appears to be in use. Trying next port..."
+            continue
+        }
+
+        $logFile = [System.IO.Path]::GetTempFileName()
+        try {
+            Write-Host "Docker container will be available at http://localhost:$port"
+            & docker run --rm `
+                -p "${port}:8000" `
+                -e "HOST_PORT=$port" `
+                $ImageName 2>&1 | Tee-Object -FilePath $logFile
+
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -eq 0) {
+                return
+            }
+
+            $output = Get-Content -Raw -Path $logFile
+            if (Test-DockerPortConflict -Output $output -Port $port) {
+                Write-Host "Port $port is already allocated by Docker. Trying next port..."
+                continue
+            }
+
+            throw "Docker run failed with exit code $exitCode."
+        }
+        finally {
+            Remove-Item $logFile -ErrorAction SilentlyContinue
         }
     }
 
@@ -45,8 +84,6 @@ if ($LASTEXITCODE -ne 0) {
     throw "Docker daemon에 연결할 수 없습니다. Docker Desktop이 실행 중인지 확인해 주세요."
 }
 
-$hostPort = Find-AvailablePort
-
 if (-not $NoBuild) {
     docker build -t $ImageName .
     if ($LASTEXITCODE -ne 0) {
@@ -54,8 +91,4 @@ if (-not $NoBuild) {
     }
 }
 
-Write-Host "Docker container will be available at http://localhost:$hostPort"
-docker run --rm `
-    -p "${hostPort}:8000" `
-    -e "HOST_PORT=$hostPort" `
-    $ImageName
+Invoke-DockerRunWithAvailablePort
