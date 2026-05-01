@@ -10,6 +10,8 @@ Render에 배포된 서비스는 아래 주소에서 바로 확인할 수 있습
 
 서비스 주소: https://autodriving-dataset-qa-dashboard.onrender.com/
 
+배포된 서비스에서는 100MB 이하의 CSV 또는 ROS bag 샘플 사용을 권장합니다. 더 큰 주행 데이터는 아래의 로컬 Docker 실행 방식으로 검증하는 것을 권장합니다.
+
 ## 주요 목표
 
 - 센서 로그의 결측치, timestamp 이상, sampling gap을 검사합니다.
