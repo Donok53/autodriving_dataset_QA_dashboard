@@ -48,13 +48,22 @@ function Invoke-DockerRunWithAvailablePort {
 
         $logFile = [System.IO.Path]::GetTempFileName()
         try {
-            Write-Host "Docker container will be available at http://localhost:$port"
-            & docker run --rm `
-                -p "${port}:8000" `
-                -e "HOST_PORT=$port" `
-                $ImageName 2>&1 | Tee-Object -FilePath $logFile
+            Write-Host "Trying Docker port mapping at http://localhost:$port"
 
-            $exitCode = $LASTEXITCODE
+            $previousErrorActionPreference = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            try {
+                & docker run --rm `
+                    -p "${port}:8000" `
+                    -e "HOST_PORT=$port" `
+                    $ImageName 2>&1 | Tee-Object -FilePath $logFile
+
+                $exitCode = $LASTEXITCODE
+            }
+            finally {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
+
             if ($exitCode -eq 0) {
                 return
             }

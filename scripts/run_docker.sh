@@ -67,7 +67,7 @@ run_with_available_port() {
     local log_file
     log_file="$(mktemp)"
 
-    echo "Docker container will be available at http://localhost:${port}"
+    echo "Trying Docker port mapping at http://localhost:${port}"
     set +e
     docker run --rm \
       -p "${port}:8000" \
