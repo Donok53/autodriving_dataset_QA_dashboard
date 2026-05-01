@@ -42,8 +42,8 @@ docker build -t autodriving-sensor-qa .
 docker run --rm -p 8000:8000 autodriving-sensor-qa
 ```
 
-브라우저에서 `http://localhost:8000`으로 접속합니다.
-실행 로그에 표시되는 `http://0.0.0.0:8000`은 컨테이너 내부 수신 주소이며, 브라우저 접속 주소로는 `localhost`를 사용합니다.
+브라우저에서 `http://localhost:8000`으로 접속합니다. 컨테이너 시작 시 `Local Docker Browser URL` 안내가 먼저 출력됩니다.
+Uvicorn 로그에 표시되는 `http://0.0.0.0:8000`은 컨테이너 내부 수신 주소이며, 브라우저 접속 주소로는 `localhost`를 사용합니다.
 
 상태 확인은 아래 주소에서 할 수 있습니다.
 
