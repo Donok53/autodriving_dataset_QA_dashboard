@@ -32,6 +32,74 @@ uvicorn app.main:app --reload
 
 브라우저에서 `http://127.0.0.1:8000`으로 접속합니다.
 
+### Ubuntu/WSL 가상환경 설정
+
+Ubuntu, Debian, WSL 환경에서 `pip install -r requirements.txt` 실행 시 `externally-managed-environment` 오류가 발생할 수 있습니다. 이는 시스템 Python 환경을 보호하기 위한 정책이므로, 시스템 Python에 직접 패키지를 설치하지 않고 가상환경을 사용합니다.
+
+```bash
+sudo apt update
+sudo apt install -y python3-full python3-venv
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+`--break-system-packages` 옵션은 시스템 Python 환경에 영향을 줄 수 있으므로 사용하지 않는 것을 권장합니다.
+
+### WSL 접속 확인
+
+WSL에서 아래처럼 Uvicorn이 실행되더라도 `0.0.0.0`은 브라우저 접속 주소가 아니라 모든 네트워크 인터페이스에서 요청을 받겠다는 의미입니다.
+
+```text
+Uvicorn running on http://0.0.0.0:8000
+```
+
+먼저 WSL 터미널 안에서 서버가 정상 응답하는지 확인합니다.
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+정상 응답 예시는 다음과 같습니다.
+
+```json
+{"status":"ok"}
+```
+
+WSL 내부에서는 정상인데 Windows 브라우저에서 접속이 안 되면 다음 주소를 차례대로 확인합니다.
+
+```text
+http://localhost:8000
+http://127.0.0.1:8000
+```
+
+그래도 접속이 안 되면 WSL IP를 확인합니다.
+
+```bash
+hostname -I
+```
+
+출력된 IP를 사용해 Windows 브라우저에서 다음 형식으로 접속합니다.
+
+```text
+http://WSL_IP:8000
+```
+
+포트가 실제로 열려 있는지도 확인할 수 있습니다.
+
+```bash
+ss -ltnp | grep 8000
+```
+
+위 확인이 모두 정상인데도 접속되지 않으면 Windows 방화벽, VPN, WSL 네트워크 설정이 원인일 수 있습니다. 포트 충돌이 의심될 때는 다른 포트로 실행합니다.
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8001
+```
+
 ## 테스트 실행
 
 ```bash
