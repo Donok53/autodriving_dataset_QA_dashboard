@@ -50,19 +50,9 @@ function Invoke-DockerRunWithAvailablePort {
         try {
             Write-Host "Trying Docker port mapping at http://localhost:$port"
 
-            $previousErrorActionPreference = $ErrorActionPreference
-            $ErrorActionPreference = "Continue"
-            try {
-                & docker run --rm `
-                    -p "${port}:8000" `
-                    -e "HOST_PORT=$port" `
-                    $ImageName 2>&1 | Tee-Object -FilePath $logFile
-
-                $exitCode = $LASTEXITCODE
-            }
-            finally {
-                $ErrorActionPreference = $previousErrorActionPreference
-            }
+            $dockerCommand = "docker run --rm -p ${port}:8000 -e HOST_PORT=$port $ImageName 2>&1"
+            & cmd.exe /d /c $dockerCommand | Tee-Object -FilePath $logFile
+            $exitCode = $LASTEXITCODE
 
             if ($exitCode -eq 0) {
                 return
