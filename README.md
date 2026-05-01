@@ -42,27 +42,43 @@ Render에 배포된 서비스는 아래 주소에서 바로 확인할 수 있습
 
 ### 실행
 
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/Donok53/autodriving_dataset_QA_dashboard.git
+cd autodriving_dataset_QA_dashboard
+
+.\scripts\run_docker.ps1
+```
+
+PowerShell 실행 정책 때문에 스크립트가 막히면 아래 명령으로 실행합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_docker.ps1
+```
+
+macOS/Linux/WSL:
+
 ```bash
 git clone https://github.com/Donok53/autodriving_dataset_QA_dashboard.git
 cd autodriving_dataset_QA_dashboard
 
-docker build -t autodriving-sensor-qa .
-docker run --rm -p 8000:8000 autodriving-sensor-qa
+./scripts/run_docker.sh
 ```
 
-브라우저에서 `http://localhost:8000`으로 접속합니다. 컨테이너 시작 시 `Local Docker Browser URL` 안내가 먼저 출력됩니다.
+스크립트는 Docker 이미지를 빌드한 뒤 8000번 포트부터 사용 가능한 포트를 자동으로 찾아 실행합니다. 예를 들어 8000번 포트가 이미 사용 중이면 8001번 포트로 실행합니다.
+
+실행 로그에 표시되는 `Local Docker Browser URL` 주소로 접속합니다.
 Uvicorn 로그에 표시되는 `http://0.0.0.0:8000`은 컨테이너 내부 수신 주소이며, 브라우저 접속 주소로는 `localhost`를 사용합니다.
 
-상태 확인은 아래 주소에서 할 수 있습니다.
-
-```text
-http://localhost:8000/health
-```
-
-Windows에서 접속이 안 되면 서버를 실행한 PowerShell은 그대로 둔 상태에서 새 PowerShell을 열고 아래 명령으로 응답을 확인합니다.
+이미지를 다시 빌드하지 않고 실행만 하려면 아래 옵션을 사용할 수 있습니다.
 
 ```powershell
-curl.exe http://localhost:8000/health
+.\scripts\run_docker.ps1 -NoBuild
+```
+
+```bash
+NO_BUILD=true ./scripts/run_docker.sh
 ```
 
 ## 개발 및 테스트
@@ -256,6 +272,9 @@ app/
   static/
 data/
   sample_sensor_log.csv
+scripts/
+  run_docker.ps1           Windows Docker 실행 스크립트
+  run_docker.sh            macOS/Linux/WSL Docker 실행 스크립트
 tests/
 .github/workflows/ci.yml
 Dockerfile
