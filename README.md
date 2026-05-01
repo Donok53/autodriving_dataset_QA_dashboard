@@ -43,11 +43,18 @@ docker run --rm -p 8000:8000 autodriving-sensor-qa
 ```
 
 브라우저에서 `http://localhost:8000`으로 접속합니다.
+실행 로그에 표시되는 `http://0.0.0.0:8000`은 컨테이너 내부 수신 주소이며, 브라우저 접속 주소로는 `localhost`를 사용합니다.
 
 상태 확인은 아래 주소에서 할 수 있습니다.
 
 ```text
 http://localhost:8000/health
+```
+
+Windows에서 접속이 안 되면 서버를 실행한 PowerShell은 그대로 둔 상태에서 새 PowerShell을 열고 아래 명령으로 응답을 확인합니다.
+
+```powershell
+curl.exe http://localhost:8000/health
 ```
 
 ## 개발 및 테스트
