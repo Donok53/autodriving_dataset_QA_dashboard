@@ -27,5 +27,13 @@ jobs:
       - name: Run pytest
         run: pytest
 
+      - name: Compile MLOps scripts
+        run: |
+          python -m py_compile \
+            app/services/model_registry.py \
+            scripts/train_vlm_model.py \
+            scripts/promote_model.py \
+            scripts/rollback_model.py
+
       - name: Build Docker image
         run: docker build -t autodriving-sensor-qa .

@@ -1,0 +1,16 @@
+services:
+  mlflow:
+    image: python:3.11-slim
+    working_dir: /workspace
+    command: >
+      sh -c "pip install --no-cache-dir mlflow==2.19.0
+      && mkdir -p /workspace/mlruns /workspace/mlartifacts
+      && mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////workspace/mlruns/mlflow.db
+      --default-artifact-root /workspace/mlartifacts"
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/workspace

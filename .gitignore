@@ -21,5 +21,12 @@ data/no_vehicle_motion.bag
 data/*.tmp.bag
 models/current/*.joblib
 !models/current/student_baseline.joblib
+models/candidates/*
+!models/candidates/.gitkeep
+models/versions/*
+!models/versions/.gitkeep
+
+mlruns/
+mlartifacts/
 
 .DS_Store

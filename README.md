@@ -225,6 +225,84 @@ curl http://127.0.0.1:8000/api/xai/model-info
 curl http://127.0.0.1:8000/api/xai/sample-result
 ```
 
+## MLflow 학습, 등록, 승격, 롤백
+
+서비스 운영 모델은 `models/current`에 있는 champion 모델을 사용합니다. MLflow 실험은 별도 MLOps 환경에서 실행하고, 학습 결과는 `models/candidates/{version}`에 저장한 뒤 검증이 끝난 모델만 `models/current`로 승격합니다. 승격 전 champion 모델은 `models/versions`에 자동 보관되어 롤백할 수 있습니다.
+
+### MLflow Tracking Server 실행
+
+Windows PowerShell:
+
+```powershell
+pip install -r requirements-mlops.txt
+.\scripts\run_mlflow_server.ps1
+```
+
+macOS/Linux/WSL:
+
+```bash
+pip install -r requirements-mlops.txt
+./scripts/run_mlflow_server.sh
+```
+
+Docker Compose:
+
+```bash
+docker compose -f docker-compose.mlflow.yml up
+```
+
+Tracking Server 주소는 기본값으로 `http://127.0.0.1:5000`을 사용합니다. backend store는 `mlruns/mlflow.db`, artifact root는 `mlartifacts`를 사용합니다. 보고서에는 이 주소와 MLflow Experiments 화면, run 상세 화면의 parameter/metric/artifact 캡쳐를 넣습니다.
+
+### 모델 재학습
+
+```bash
+export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+python scripts/train_vlm_model.py --version outdoor-rich-v2
+```
+
+Windows PowerShell:
+
+```powershell
+$env:MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
+python .\scripts\train_vlm_model.py --version outdoor-rich-v2
+```
+
+학습 스크립트는 `data/vlm_training_manifest.csv`를 읽어 student VLM 분류 모델을 학습하고, MLflow에 parameter, metric, artifact, sklearn model을 기록합니다. 동시에 서비스 반영용 bundle을 `models/candidates/outdoor-rich-v2`에 저장합니다.
+
+기록 항목:
+
+| 구분 | 내용 |
+| --- | --- |
+| parameter | image size, feature dim, train/test rows, class count, LogisticRegression 설정 |
+| metric | accuracy, macro F1, weighted F1, macro precision, macro recall |
+| artifact | training manifest, `student_baseline.joblib`, `model_info.json`, classification report, confusion matrix |
+| model | MLflow sklearn classifier와 dashboard service model bundle |
+
+### 모델 승격
+
+```bash
+python scripts/promote_model.py --candidate-dir models/candidates/outdoor-rich-v2
+```
+
+또는 MLflow run id에서 직접 가져와 승격할 수 있습니다.
+
+```bash
+python scripts/promote_model.py --run-id <MLFLOW_RUN_ID> --tracking-uri http://127.0.0.1:5000
+```
+
+승격이 끝나면 `models/current/model_info.json`의 status가 `champion`이 되고, `/api/xai/model-info`와 bag 업로드 VLM 분석 영상이 새 모델을 사용합니다. 배포 반영은 Git commit/push 이후 GitHub Actions 테스트와 Render auto deploy를 통해 진행합니다.
+
+### 롤백
+
+```bash
+python scripts/rollback_model.py --list
+python scripts/rollback_model.py --version-dir models/versions/<archived-model-dir>
+```
+
+`--version-dir`를 생략하면 가장 최근에 보관된 모델로 되돌립니다. 롤백 전 현재 모델도 다시 `models/versions`에 보관하므로, 운영 중 모델 교체 이력을 추적할 수 있습니다.
+
+보고서 작성용 전체 근거는 `docs/mlops_report_guide.md`에 정리되어 있습니다.
+
 ## 운영 로그와 자동 이슈 생성
 
 애플리케이션은 요청 처리, 업로드 작업, 분석 작업의 주요 상태를 표준 로그로 남깁니다. Render에서는 서비스의 Logs 화면에서 `error`, `warning`, `job_id`, `request_id` 같은 키워드로 검색할 수 있습니다.
@@ -324,11 +402,21 @@ data/
 models/
   current/
     model_info.json
+    student_baseline.joblib
+  candidates/               학습 후보 모델 저장 위치
+  versions/                 승격 전 champion 모델 보관 위치
 scripts/
   run_docker.ps1           Windows Docker 실행 스크립트
   run_docker.sh            macOS/Linux/WSL Docker 실행 스크립트
+  run_mlflow_server.ps1     Windows MLflow Tracking Server 실행 스크립트
+  run_mlflow_server.sh      macOS/Linux/WSL MLflow Tracking Server 실행 스크립트
+  train_vlm_model.py        MLflow 기반 student VLM 학습 스크립트
+  promote_model.py          candidate 모델을 champion으로 승격
+  rollback_model.py         이전 champion 모델로 롤백
 tests/
 .github/workflows/ci.yml
 Dockerfile
+docker-compose.mlflow.yml
 render.yaml
+requirements-mlops.txt
 ```
