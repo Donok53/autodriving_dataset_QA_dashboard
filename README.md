@@ -192,15 +192,15 @@ Render 배포는 `render.yaml`을 기준으로 Docker Web Service를 생성하�
 
 ## XAI/VLM MLOps 확장
 
-대시보드는 ROS 전체 runtime을 Render 안에서 실행하지 않고, 로컬 ROS 환경에서 생성된 `/xai/vlm_log` 결과와 MLflow로 승격된 student 모델 메타데이터를 웹에서 확인하는 구조로 확장했습니다.
+대시보드는 업로드된 ROS bag의 카메라 프레임을 웹 서버에서 직접 student VLM 모델로 추론하고, `cv2.imshow()`에 표시하던 형태와 같은 overlay 이미지를 결과 영상으로 생성합니다. 사용자는 별도 로컬 ROS/VLM 프로세스를 켜지 않아도 웹에 bag을 올린 뒤 VLM 분석 영상을 확인할 수 있습니다.
 
 XAI/VLM student 모델의 학습 코드, ROS runtime, overlay 생성 기능은 별도 저장소에서 먼저 개발한 뒤 이 대시보드에 서비스/API 형태로 연결했습니다.
 
 bag 파일에 `/student_xai/rich_overlay` 또는 `/student_xai/overlay` 같은 XAI/VLM overlay 이미지 토픽이 포함되어 있으면 대시보드는 해당 토픽을 우선 선택해 카메라 영상 플레이어로 보여줍니다. overlay 토픽이 없을 때는 `/camera/color/image_raw` 같은 일반 color camera 토픽을 사용합니다.
 
-비동기 업로드 결과 화면은 선택된 이미지 토픽의 프레임을 `runtime/camera_frames/{job_id}`에 파일로 저장한 뒤 `/camera-frames/{job_id}/...` URL manifest로 재생합니다. 그래서 페이지에 base64 이미지를 모두 넣지 않고도 bag 전체 메시지 범위의 프레임 재생이 가능합니다. 운영 환경에서 프레임 저장량을 제한하려면 `MAX_CAMERA_VIDEO_FRAMES`에 최대 프레임 수를 지정하고, 기본값 `0`은 제한 없음입니다.
+비동기 업로드 결과 화면은 선택된 이미지 토픽의 원본 프레임을 `runtime/camera_frames/{job_id}`에 저장하고, 서버 VLM이 생성한 overlay 프레임을 `runtime/camera_frames/{job_id}/server_vlm`에 저장합니다. 결과 페이지의 `Bag VLM 분석 영상` 플레이어는 이 overlay 프레임 manifest를 재생합니다. 운영 환경에서 프레임 저장량을 제한하려면 `MAX_CAMERA_VIDEO_FRAMES`에 최대 프레임 수를 지정하고, 기본값 `0`은 제한 없음입니다.
 
-bag 안에 `/xai/vlm_log`, `/student_xai/rich_reason`, `/student_xai/camera_reason` 같은 설명 토픽이 있으면 이를 `/xai/vlm_log` 형태로 정규화합니다. 설명 토픽이 없거나 설명 문장이 비어 있으면 센서 이벤트, 이상 구간, 토픽 상태를 기반으로 dashboard generated `/xai/vlm_log`를 만들고, 각 카메라 프레임에 가장 가까운 설명을 영상 위에 overlay합니다.
+서버 VLM은 `models/current/student_baseline.joblib` 모델을 사용해 각 프레임의 대표 객체, 움직임 요약, 설명 문장을 만들고 이를 `/xai/vlm_log` 형태의 분석 결과로 요약합니다. 모델 또는 OpenCV 의존성을 사용할 수 없으면 기존 bag 카메라 영상은 유지하고 결과 페이지에 VLM unavailable 상태를 표시합니다.
 
 | 구분 | 링크 |
 | --- | --- |
@@ -218,14 +218,12 @@ bag 안에 `/xai/vlm_log`, `/student_xai/rich_reason`, `/student_xai/camera_reas
 | `/api/xai/log-summary` | JSON payload로 받은 XAI 로그를 정상/정지/회피/도착 기준으로 요약 |
 | `/api/xai/predict` | `MODEL_PATH` 또는 `models/current`의 student 모델로 예측 실행 |
 
-현재 서비스 모델 정보는 `models/current/model_info.json`에 저장합니다. MLflow에서 champion 모델을 선택한 뒤 `models/current/student_baseline.joblib`로 승격하면 대시보드가 같은 경로를 사용합니다.
+현재 서비스 모델 정보는 `models/current/model_info.json`에 저장합니다. MLflow에서 champion 모델을 선택한 뒤 `models/current/student_baseline.joblib`로 승격하면 대시보드가 같은 경로를 사용합니다. `SERVER_VLM_ENABLED=false`로 설정하면 업로드 분석에서 서버 VLM overlay 생성을 끌 수 있습니다. `SERVER_VLM_MAX_FRAMES`를 지정하면 VLM으로 처리할 최대 프레임 수를 제한할 수 있고, 기본값 `0`은 저장된 모든 프레임을 처리합니다.
 
 ```bash
 curl http://127.0.0.1:8000/api/xai/model-info
 curl http://127.0.0.1:8000/api/xai/sample-result
 ```
-
-로컬 ROS runtime은 `xai_autonomy_vlm_teacher_distill` 저장소에서 실행하고, Render 서비스는 샘플 결과와 모델 버전 확인용으로 유지합니다. 실제 bag replay, overlay 생성, `/xai/vlm_log` record는 로컬 ROS/Noetic 환경에서 수행하는 것을 권장합니다.
 
 ## 운영 로그와 자동 이슈 생성
 

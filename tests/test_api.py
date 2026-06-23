@@ -53,12 +53,11 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
-    assert "camera-player.js?v=4" in response.text
-    assert "live-vlm.js?v=1" in response.text
+    assert "camera-player.js?v=5" in response.text
     assert "upload-progress.js?v=6" in response.text
     assert "analysis-progress-panel" in response.text
-    assert "실시간 VLM 화면" in response.text
-    assert "http://127.0.0.1:8090/stream.mjpg" in response.text
+    assert "실시간 VLM 화면" not in response.text
+    assert "http://127.0.0.1:8090/stream.mjpg" not in response.text
     assert 'data-max-upload-bytes="10737418240"' in response.text
     assert 'data-max-upload-label="10GB"' in response.text
     assert "sample_sensor_log.csv" not in response.text
@@ -138,10 +137,12 @@ def test_async_bag_upload_renders_camera_frame_files():
 
         result_response = client.get(f"/jobs/{job_id}")
         assert result_response.status_code == 200
-        assert "Bag 카메라 영상" in result_response.text
+        assert "Bag VLM 분석 영상" in result_response.text
         assert "data-camera-frame-manifest" in result_response.text
         assert f"/camera-frames/{job_id}/frame_000000.jpg" in result_response.text
+        assert f"/camera-frames/{job_id}/server_vlm/vlm_frame_000000.jpg" in result_response.text
         assert (main_module.CAMERA_FRAME_DIR / job_id / "frame_000000.jpg").exists()
+        assert (main_module.CAMERA_FRAME_DIR / job_id / "server_vlm" / "vlm_frame_000000.jpg").exists()
     finally:
         shutil.rmtree(main_module.CAMERA_FRAME_DIR / job_id, ignore_errors=True)
 

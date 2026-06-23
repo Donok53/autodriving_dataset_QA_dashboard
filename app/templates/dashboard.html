@@ -6,8 +6,7 @@
     <title>Autodriving Sensor QA</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/pagination.js?v=2" defer></script>
-    <script src="/static/camera-player.js?v=4" defer></script>
-    <script src="/static/live-vlm.js?v=1" defer></script>
+    <script src="/static/camera-player.js?v=5" defer></script>
     <script src="/static/upload-progress.js?v=6" defer></script>
   </head>
   <body>
@@ -39,33 +38,6 @@
             <a href="/sample">샘플 데이터</a>
           </div>
         </form>
-      </section>
-
-      <section class="panel live-vlm-panel" data-live-vlm>
-        <div class="section-title">
-          <h2>실시간 VLM 화면</h2>
-          <span class="status good" data-live-vlm-status>로컬 스트림</span>
-        </div>
-        <div class="live-vlm-layout">
-          <div class="live-vlm-screen">
-            <img
-              src="http://127.0.0.1:8090/stream.mjpg"
-              alt="XAI VLM live stream"
-              data-live-vlm-image
-            >
-          </div>
-          <form class="live-vlm-controls" data-live-vlm-form>
-            <label for="live-vlm-url">스트림 주소</label>
-            <input
-              id="live-vlm-url"
-              type="url"
-              value="http://127.0.0.1:8090/stream.mjpg"
-              data-live-vlm-url
-            >
-            <button type="submit">연결</button>
-            <a href="http://127.0.0.1:8090/" target="_blank" rel="noopener" data-live-vlm-open>새 창</a>
-          </form>
-        </div>
       </section>
 
       <section id="analysis-progress-panel" class="progress-panel" aria-live="polite" hidden>
@@ -180,13 +152,19 @@
 
       {% if has_result %}
       {% if summary.camera_frames %}
+      {% set server_vlm = summary.server_vlm if summary.server_vlm else none %}
       <section class="panel camera-panel" data-camera-player>
         <div class="section-title">
-          <h2>Bag 카메라 영상</h2>
-          <span class="status good">{{ summary.camera_frames | length }} frames</span>
+          <h2>{% if server_vlm and server_vlm.enabled %}Bag VLM 분석 영상{% else %}Bag 카메라 영상{% endif %}</h2>
+          <span class="status {% if server_vlm and server_vlm.enabled %}good{% elif server_vlm and server_vlm.error %}warn{% else %}good{% endif %}">
+            {% if server_vlm and server_vlm.enabled %}server vlm · {{ server_vlm.frame_count }} frames{% elif server_vlm and server_vlm.error %}vlm unavailable{% else %}{{ summary.camera_frames | length }} frames{% endif %}
+          </span>
         </div>
+        {% if server_vlm and server_vlm.error %}
+        <p class="inline-note">서버 VLM 분석을 건너뛰었습니다: {{ server_vlm.error }}</p>
+        {% endif %}
         {% set first_frame = summary.camera_frames[0] %}
-        {% set first_frame_src = first_frame.image_url or first_frame.data_url %}
+        {% set first_frame_src = first_frame.vlm_image_url or first_frame.image_url or first_frame.data_url %}
         <script type="application/json" data-camera-frame-manifest>{{ summary.camera_frames | tojson }}</script>
         <div class="camera-player">
           <div class="camera-screen">
@@ -226,7 +204,7 @@
         <div class="camera-frame-strip" aria-label="camera frames">
           {% for frame in summary.camera_frames %}
           {% if loop.index0 < 120 %}
-          {% set frame_src = frame.image_url or frame.data_url %}
+          {% set frame_src = frame.vlm_image_url or frame.image_url or frame.data_url %}
           <button
             type="button"
             class="camera-thumb{% if loop.first %} active{% endif %}"

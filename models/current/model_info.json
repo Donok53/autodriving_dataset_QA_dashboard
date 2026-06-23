@@ -1,10 +1,10 @@
 {
   "model_name": "xai_student_model",
-  "version": "sample-v1",
-  "run_id": "sample-run-v1",
-  "accuracy": 0.87,
-  "macro_f1": 0.83,
+  "version": "outdoor-rich-v1",
+  "run_id": "local-outdoor-sign-vehicle-rich-full",
+  "accuracy": 0.6240601503759399,
+  "macro_f1": 0.4793488749205388,
   "promoted_at": "2026-06-23T00:00:00+00:00",
-  "status": "sample",
+  "status": "champion",
   "model_path": "models/current/student_baseline.joblib"
 }

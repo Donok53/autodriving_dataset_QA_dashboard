@@ -21,6 +21,7 @@ from app.services.analyzer import InvalidSensorLogError, analyze_csv
 from app.services.issue_reporter import report_unexpected_error
 from app.services.job_store import create_job, get_job, update_job
 from app.services.model_service import get_model_info
+from app.services.server_vlm import apply_server_vlm_to_summary
 from app.services.xai_log_analyzer import InvalidXaiLogError, analyze_sample_xai_log
 
 
@@ -611,6 +612,19 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
                 camera_frame_url_prefix=_camera_frame_url_prefix(job_id),
                 max_camera_frames=_camera_video_frame_limit(),
             ).to_dict()
+            if frame_dir is not None and summary.get("camera_frames"):
+                update_job(job_id, status="running", progress=90, stage="서버 VLM 영상 생성 준비 중")
+                summary = apply_server_vlm_to_summary(
+                    summary,
+                    frame_dir=frame_dir,
+                    frame_url_prefix=_camera_frame_url_prefix(job_id),
+                    progress_callback=lambda progress, stage: update_job(
+                        job_id,
+                        status="running",
+                        progress=progress,
+                        stage=stage,
+                    ),
+                )
             if frame_dir is not None and not summary.get("camera_frames"):
                 shutil.rmtree(frame_dir, ignore_errors=True)
 

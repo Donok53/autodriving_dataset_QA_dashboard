@@ -20,5 +20,6 @@ data/no_gps.bag
 data/no_vehicle_motion.bag
 data/*.tmp.bag
 models/current/*.joblib
+!models/current/student_baseline.joblib
 
 .DS_Store

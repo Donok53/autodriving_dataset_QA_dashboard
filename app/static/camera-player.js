@@ -38,7 +38,7 @@ function initCameraPlayer(player) {
   }
 
   const frames = manifestFrames.map((frame) => ({
-    src: frame.image_url || frame.data_url || "",
+    src: frame.vlm_image_url || frame.image_url || frame.data_url || "",
     topic: frame.topic || "",
     timestamp: frame.timestamp || "",
     meta: `${frame.width || 0}x${frame.height || 0} · ${frame.encoding || ""}`,
