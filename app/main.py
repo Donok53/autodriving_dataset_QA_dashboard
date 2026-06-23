@@ -265,7 +265,7 @@ async def _analyze_uploaded_bag(request: Request, file: UploadFile):
             temp_file.write(chunk)
 
     try:
-        summary = analyze_bag(temp_path).to_dict()
+        summary = analyze_bag(temp_path, allow_reindex=True).to_dict()
         return _dashboard_response(request, summary, file.filename or temp_path.name)
     except InvalidBagFileError as exc:
         return _dashboard_response(request, error=str(exc))
@@ -554,6 +554,7 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
         else:
             summary = analyze_bag(
                 temp_path,
+                allow_reindex=True,
                 progress_callback=lambda progress, stage: update_job(
                     job_id,
                     status="running",

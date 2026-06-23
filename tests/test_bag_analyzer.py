@@ -2,6 +2,7 @@ from app.models import DrivingEvent
 from app.services.bag_analyzer import (
     BagReadResult,
     BagTopicSeries,
+    analyze_bag,
     build_bag_summary,
     infer_sensor_category,
 )
@@ -96,3 +97,36 @@ def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
     assert any("camera" in anomaly["description"] for anomaly in payload["anomalies"])
     assert any(status["sensor"] == "camera" and status["status"] == "위험" for status in payload["sync_statuses"])
     assert payload["events"][0]["event_type"] == "bag_imu_acceleration"
+
+
+def test_analyze_bag_reindexes_damaged_upload_copy(tmp_path, monkeypatch):
+    bag_path = tmp_path / "damaged.bag"
+    bag_path.write_bytes(b"bag")
+    calls = {"read": 0, "reindex": 0}
+
+    def fake_read_bag(path, max_messages, progress_callback):
+        calls["read"] += 1
+        if calls["read"] == 1:
+            raise RuntimeError("Bag index looks damaged")
+        return BagReadResult(
+            topic_series=[],
+            total_message_count=0,
+            processed_message_count=0,
+            start_time_ns=1_700_000_000_000_000_000,
+            end_time_ns=1_700_000_001_000_000_000,
+            imu_events=[],
+            gps_events=[],
+            camera_frames=[],
+        )
+
+    def fake_reindex(path):
+        calls["reindex"] += 1
+        assert path == bag_path
+
+    monkeypatch.setattr("app.services.bag_analyzer.read_bag", fake_read_bag)
+    monkeypatch.setattr("app.services.bag_analyzer._reindex_bag", fake_reindex)
+
+    summary = analyze_bag(bag_path, allow_reindex=True)
+
+    assert summary.source_type == "bag"
+    assert calls == {"read": 2, "reindex": 1}

@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 from io import BytesIO
 import math
+import shutil
+import subprocess
 from bisect import bisect_left
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -61,13 +63,22 @@ def analyze_bag(
     path: Path,
     max_messages: int = MAX_BAG_MESSAGES,
     progress_callback: ProgressCallback | None = None,
+    allow_reindex: bool = False,
 ) -> AnalysisSummary:
     if not path.exists() or path.stat().st_size == 0:
         raise InvalidBagFileError("비어 있거나 존재하지 않는 bag 파일입니다.")
 
     try:
         _notify_progress(progress_callback, 15, "bag 메타데이터 읽는 중")
-        read_result = read_bag(path, max_messages=max_messages, progress_callback=progress_callback)
+        try:
+            read_result = read_bag(path, max_messages=max_messages, progress_callback=progress_callback)
+        except Exception as exc:
+            if not allow_reindex or not _is_reindexable_bag_error(exc):
+                raise
+            _notify_progress(progress_callback, 20, "bag index 복구 중")
+            _reindex_bag(path)
+            _notify_progress(progress_callback, 30, "복구된 bag 메타데이터 읽는 중")
+            read_result = read_bag(path, max_messages=max_messages, progress_callback=progress_callback)
         _notify_progress(progress_callback, 90, "분석 결과 정리 중")
     except Exception as exc:
         raise InvalidBagFileError(f"bag 파일을 읽을 수 없습니다: {exc}") from exc
@@ -162,6 +173,43 @@ def read_bag(
             gps_events=_detect_gps_jump_events(gps_points),
             camera_frames=camera_frames,
         )
+
+
+def _is_reindexable_bag_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "bag index looks damaged" in message
+        or "bag is not indexed" in message
+        or "run rosbag reindex" in message
+    )
+
+
+def _reindex_bag(path: Path) -> None:
+    rosbag_command = shutil.which("rosbag")
+    if rosbag_command is None:
+        raise InvalidBagFileError(
+            "bag index가 손상되어 자동 복구가 필요하지만, 현재 실행 환경에서 rosbag 명령을 찾을 수 없습니다. "
+            "로컬 ROS 환경에서 rosbag reindex를 실행한 뒤 다시 업로드해주세요."
+        )
+
+    backup_path = _reindex_backup_path(path)
+    try:
+        result = subprocess.run(
+            [rosbag_command, "reindex", "--force", "--quiet", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=None,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise InvalidBagFileError(f"rosbag reindex에 실패했습니다: {detail}")
+    finally:
+        backup_path.unlink(missing_ok=True)
+
+
+def _reindex_backup_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.orig{path.suffix}")
 
 
 def build_bag_summary(read_result: BagReadResult) -> AnalysisSummary:
