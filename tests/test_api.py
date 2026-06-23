@@ -52,6 +52,7 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
+    assert "camera-player.js?v=1" in response.text
     assert "upload-progress.js?v=6" in response.text
     assert "analysis-progress-panel" in response.text
     assert 'data-max-upload-bytes="10737418240"' in response.text
@@ -103,7 +104,9 @@ def test_bag_upload_renders_camera_preview():
         )
 
     assert response.status_code == 200
-    assert "Bag 카메라 화면" in response.text
+    assert "Bag 카메라 영상" in response.text
+    assert "data-camera-player" in response.text
+    assert "data-camera-frame" in response.text
     assert "data:image/jpeg;base64," in response.text
     assert "/camera/color/image_raw" in response.text
 

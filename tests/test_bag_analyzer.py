@@ -1,7 +1,10 @@
+from types import SimpleNamespace
+
 from app.models import DrivingEvent
 from app.services.bag_analyzer import (
     BagReadResult,
     BagTopicSeries,
+    _select_camera_preview_topic,
     analyze_bag,
     build_bag_summary,
     infer_sensor_category,
@@ -16,6 +19,16 @@ def test_infer_sensor_category_from_topic_and_msgtype():
     assert infer_sensor_category("/cmd_vel", "geometry_msgs/msg/Twist") == "vehicle_motion"
     assert infer_sensor_category("/cmd/vel", "geometry_msgs/msg/TwistStamped") == "vehicle_motion"
     assert infer_sensor_category("/diagnostics", "diagnostic_msgs/msg/DiagnosticArray") == "other"
+
+
+def test_select_camera_preview_topic_prefers_xai_overlay():
+    topics = {
+        "/camera/color/image_raw": SimpleNamespace(msgtype="sensor_msgs/msg/Image", msgcount=300),
+        "/student_xai/rich_overlay": SimpleNamespace(msgtype="sensor_msgs/msg/Image", msgcount=30),
+        "/camera/depth/image_raw": SimpleNamespace(msgtype="sensor_msgs/msg/Image", msgcount=300),
+    }
+
+    assert _select_camera_preview_topic(topics) == "/student_xai/rich_overlay"
 
 
 def test_build_bag_summary_detects_topic_gap_and_missing_sensor():

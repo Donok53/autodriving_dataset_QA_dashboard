@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from io import BytesIO
 import math
+import os
 import shutil
 import subprocess
 from bisect import bisect_left
@@ -24,11 +25,21 @@ from app.models import (
     SensorSyncStatus,
 )
 
+
+def _read_positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return max(1, value)
+
+
 EXPECTED_SENSORS = ("lidar", "imu", "camera", "gps", "vehicle_motion")
 SENSOR_SORT_ORDER = {sensor: index for index, sensor in enumerate((*EXPECTED_SENSORS, "other"))}
 MAX_BAG_MESSAGES = 500_000
 MAX_EVENT_COUNT = 30
-MAX_CAMERA_PREVIEW_FRAMES = 6
+MAX_CAMERA_PREVIEW_FRAMES = _read_positive_int_env("MAX_CAMERA_PREVIEW_FRAMES", 60)
+XAI_OVERLAY_TOPIC_HINTS = ("student_xai", "rich_overlay", "overlay", "vlm", "/xai")
 
 
 class InvalidBagFileError(ValueError):
@@ -277,6 +288,12 @@ def _camera_preview_topic_score(topic: str, msgtype: str) -> int:
         return 0
 
     score = 10
+    if any(token in text for token in XAI_OVERLAY_TOPIC_HINTS):
+        score += 100
+    if "rich_overlay" in text:
+        score += 30
+    if "student_xai" in text:
+        score += 20
     if "color" in text or "rgb" in text:
         score += 30
     if "image_raw" in text:

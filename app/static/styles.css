@@ -363,47 +363,106 @@ th {
   line-height: 1.5;
 }
 
-.camera-preview-grid {
+.camera-player {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
-.camera-frame {
-  margin: 0;
+.camera-screen {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
+  background: #101827;
 }
 
-.camera-frame img {
+.camera-screen img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #101827;
+}
+
+.camera-controls {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.camera-controls button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: #344054;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.camera-controls button:hover {
+  background: var(--surface-strong);
+}
+
+.camera-controls input[type="range"] {
+  width: 100%;
+}
+
+.camera-status {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.camera-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.camera-meta strong,
+.camera-meta span {
+  overflow-wrap: anywhere;
+}
+
+.camera-meta strong {
+  color: #344054;
+  font-size: 14px;
+}
+
+.camera-meta span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.camera-frame-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px;
+  max-height: 228px;
+  overflow: auto;
+  padding: 2px;
+}
+
+.camera-thumb {
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #101827;
+  cursor: pointer;
+}
+
+.camera-thumb.active {
+  border-color: var(--blue);
+}
+
+.camera-thumb img {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  background: #101827;
-}
-
-.camera-frame figcaption {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-}
-
-.camera-frame figcaption strong,
-.camera-frame figcaption span {
-  overflow-wrap: anywhere;
-}
-
-.camera-frame figcaption strong {
-  color: #344054;
-  font-size: 13px;
-}
-
-.camera-frame figcaption span {
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .event-item {
@@ -477,9 +536,21 @@ th {
   .summary-strip,
   .metric-grid,
   .xai-grid,
-  .camera-preview-grid,
   .two-column {
     grid-template-columns: 1fr;
+  }
+
+  .camera-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .camera-controls input[type="range"],
+  .camera-status {
+    grid-column: 1 / -1;
+  }
+
+  .camera-status {
+    text-align: left;
   }
 
   .score-ring {

@@ -6,6 +6,7 @@
     <title>Autodriving Sensor QA</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/pagination.js?v=2" defer></script>
+    <script src="/static/camera-player.js?v=1" defer></script>
     <script src="/static/upload-progress.js?v=6" defer></script>
   </head>
   <body>
@@ -132,19 +133,53 @@
 
       {% if has_result %}
       {% if summary.camera_frames %}
-      <section class="panel">
+      <section class="panel camera-panel" data-camera-player>
         <div class="section-title">
-          <h2>Bag 카메라 화면</h2>
+          <h2>Bag 카메라 영상</h2>
+          <span class="status good">{{ summary.camera_frames | length }} frames</span>
         </div>
-        <div class="camera-preview-grid">
+        {% set first_frame = summary.camera_frames[0] %}
+        <div class="camera-player">
+          <div class="camera-screen">
+            <img
+              src="{{ first_frame.data_url }}"
+              alt="{{ first_frame.topic }} camera video frame"
+              data-camera-player-image
+            >
+          </div>
+          <div class="camera-controls">
+            <button type="button" data-camera-prev>이전</button>
+            <button type="button" data-camera-play>재생</button>
+            <button type="button" data-camera-next>다음</button>
+            <input
+              type="range"
+              min="1"
+              max="{{ summary.camera_frames | length }}"
+              value="1"
+              aria-label="camera frame"
+              data-camera-seeker
+            >
+            <span class="camera-status" data-camera-status>1 / {{ summary.camera_frames | length }}</span>
+          </div>
+          <div class="camera-meta">
+            <strong data-camera-topic>{{ first_frame.topic }}</strong>
+            <span data-camera-details>{{ first_frame.timestamp }} · {{ first_frame.width }}x{{ first_frame.height }} · {{ first_frame.encoding }}</span>
+          </div>
+        </div>
+        <div class="camera-frame-strip" aria-label="camera frames">
           {% for frame in summary.camera_frames %}
-          <figure class="camera-frame">
-            <img src="{{ frame.data_url }}" alt="{{ frame.topic }} camera frame {{ loop.index }}">
-            <figcaption>
-              <strong>{{ frame.topic }}</strong>
-              <span>{{ frame.timestamp }} · {{ frame.width }}x{{ frame.height }} · {{ frame.encoding }}</span>
-            </figcaption>
-          </figure>
+          <button
+            type="button"
+            class="camera-thumb{% if loop.first %} active{% endif %}"
+            data-camera-frame
+            data-frame-index="{{ loop.index0 }}"
+            data-frame-topic="{{ frame.topic }}"
+            data-frame-timestamp="{{ frame.timestamp }}"
+            data-frame-meta="{{ frame.width }}x{{ frame.height }} · {{ frame.encoding }}"
+            aria-label="{{ frame.topic }} frame {{ loop.index }}"
+          >
+            <img src="{{ frame.data_url }}" alt="" loading="lazy">
+          </button>
           {% endfor %}
         </div>
       </section>

@@ -18,7 +18,7 @@ Render에 배포된 서비스는 아래 주소에서 바로 확인할 수 있습
 - camera, lidar, imu, gps, 차량 움직임 명령(cmd_vel)의 동기화 상태를 요약합니다.
 - 급가속, 급제동, GPS jump, 센서 dropout 이벤트를 탐지합니다.
 - ROS bag 파일의 토픽 주기, 메시지 수, 핵심 데이터 스트림 커버리지, timestamp gap을 검사합니다.
-- ROS bag 안의 color camera topic에서 프레임을 추출해 웹 대시보드에 미리보기로 표시합니다.
+- ROS bag 안의 XAI/VLM overlay 또는 color camera topic에서 프레임을 추출해 웹 대시보드에서 영상처럼 재생합니다.
 - XAI/VLM student 모델 버전과 샘플 설명 결과를 대시보드와 API에서 확인합니다.
 - `/xai/vlm_log` JSON을 요약하여 정상 주행, 안전 정지, 회피, 목적지 도착 이벤트를 집계합니다.
 - GitHub Actions, Docker, Render 배포 흐름을 연결할 수 있는 구조로 개발합니다.
@@ -196,6 +196,8 @@ Render 배포는 `render.yaml`을 기준으로 Docker Web Service를 생성하�
 
 XAI/VLM student 모델의 학습 코드, ROS runtime, overlay 생성 기능은 별도 저장소에서 먼저 개발한 뒤 이 대시보드에 서비스/API 형태로 연결했습니다.
 
+bag 파일에 `/student_xai/rich_overlay` 또는 `/student_xai/overlay` 같은 XAI/VLM overlay 이미지 토픽이 포함되어 있으면 대시보드는 해당 토픽을 우선 선택해 카메라 영상 플레이어로 보여줍니다. overlay 토픽이 없을 때는 `/camera/color/image_raw` 같은 일반 color camera 토픽을 사용합니다.
+
 | 구분 | 링크 |
 | --- | --- |
 | XAI/VLM 학습 및 ROS runtime 저장소 | [Donok53/xai_vlm](https://github.com/Donok53/xai_vlm) |
@@ -257,7 +259,7 @@ AUTO_ISSUE_MAX_PER_RUNTIME=5
 ### ROS bag 파일
 
 - bag 전체 메시지 수와 주행 시간
-- camera color image topic 프레임 미리보기
+- XAI/VLM overlay 또는 camera color image topic 프레임 영상 플레이어
 - 토픽별 메시지 수, 추정 주파수, 중앙 주기, 최대 gap
 - camera, lidar, imu, gps, vehicle_motion 계열 토픽 커버리지
 - 핵심 데이터 스트림 누락 여부
