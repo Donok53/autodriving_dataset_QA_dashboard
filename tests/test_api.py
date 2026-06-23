@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import shutil
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -52,7 +53,7 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
-    assert "camera-player.js?v=1" in response.text
+    assert "camera-player.js?v=2" in response.text
     assert "upload-progress.js?v=6" in response.text
     assert "analysis-progress-panel" in response.text
     assert 'data-max-upload-bytes="10737418240"' in response.text
@@ -109,6 +110,36 @@ def test_bag_upload_renders_camera_preview():
     assert "data-camera-frame" in response.text
     assert "data:image/jpeg;base64," in response.text
     assert "/camera/color/image_raw" in response.text
+
+
+def test_async_bag_upload_renders_camera_frame_files():
+    with open("data/sample_no_gps_5s.bag", "rb") as file:
+        response = client.post(
+            "/api/upload/raw",
+            content=file.read(),
+            headers={
+                "content-type": "application/octet-stream",
+                "x-filename": "sample_no_gps_5s.bag",
+            },
+        )
+
+    assert response.status_code == 200
+    job = response.json()
+    job_id = job["job_id"]
+
+    try:
+        status_response = client.get(f"/api/jobs/{job_id}")
+        assert status_response.status_code == 200
+        assert status_response.json()["status"] == "completed"
+
+        result_response = client.get(f"/jobs/{job_id}")
+        assert result_response.status_code == 200
+        assert "Bag 카메라 영상" in result_response.text
+        assert "data-camera-frame-manifest" in result_response.text
+        assert f"/camera-frames/{job_id}/frame_000000.jpg" in result_response.text
+        assert (main_module.CAMERA_FRAME_DIR / job_id / "frame_000000.jpg").exists()
+    finally:
+        shutil.rmtree(main_module.CAMERA_FRAME_DIR / job_id, ignore_errors=True)
 
 
 def test_async_csv_upload_job_completes_and_renders_result():

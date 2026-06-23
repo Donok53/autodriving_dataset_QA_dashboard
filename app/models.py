@@ -70,8 +70,9 @@ class CameraFramePreview:
     height: int
     encoding: str
     data_url: str
+    image_url: str | None = None
 
-    def to_dict(self) -> dict[str, str | int]:
+    def to_dict(self) -> dict[str, str | int | None]:
         return asdict(self)
 
 

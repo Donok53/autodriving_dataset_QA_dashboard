@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from io import BytesIO
 import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from threading import Lock
@@ -22,6 +23,15 @@ from app.services.job_store import create_job, get_job, update_job
 from app.services.model_service import get_model_info
 from app.services.xai_log_analyzer import InvalidXaiLogError, analyze_sample_xai_log
 
+
+def _read_nonnegative_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return max(0, value)
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_sensor_log.csv"
 SUPPORTED_UPLOAD_SUFFIXES = {".csv", ".bag"}
@@ -31,6 +41,9 @@ MAX_ACTIVE_UPLOAD_BYTES = int(os.getenv("MAX_ACTIVE_UPLOAD_BYTES", str(250 * 102
 MAX_UPLOAD_SIZE_LABEL = os.getenv("MAX_UPLOAD_SIZE_LABEL", "10GB")
 MAX_ACTIVE_UPLOAD_SIZE_LABEL = os.getenv("MAX_ACTIVE_UPLOAD_SIZE_LABEL", "250GB")
 UPLOAD_TEMP_DIR = Path(os.getenv("UPLOAD_TEMP_DIR", tempfile.gettempdir()))
+CAMERA_FRAME_DIR = Path(os.getenv("CAMERA_FRAME_DIR", PROJECT_ROOT / "runtime" / "camera_frames"))
+CAMERA_FRAME_TTL_SECONDS = _read_nonnegative_int_env("CAMERA_FRAME_TTL_SECONDS", 2 * 60 * 60)
+MAX_CAMERA_VIDEO_FRAMES = _read_nonnegative_int_env("MAX_CAMERA_VIDEO_FRAMES", 0)
 ALLOW_LOCAL_UNLIMITED_UPLOADS = os.getenv("ALLOW_LOCAL_UNLIMITED_UPLOADS", "true").lower() in {
     "1",
     "true",
@@ -63,6 +76,7 @@ _configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _cleanup_abandoned_upload_files()
+    _cleanup_expired_camera_frame_dirs()
     yield
 
 
@@ -73,7 +87,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+CAMERA_FRAME_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), name="static")
+app.mount("/camera-frames", StaticFiles(directory=CAMERA_FRAME_DIR), name="camera_frames")
 app.include_router(xai_router)
 
 
@@ -412,6 +428,32 @@ def _cleanup_abandoned_upload_files() -> None:
             temp_path.unlink(missing_ok=True)
 
 
+def _cleanup_expired_camera_frame_dirs() -> None:
+    if not CAMERA_FRAME_DIR.exists():
+        return
+
+    cutoff = time.time() - CAMERA_FRAME_TTL_SECONDS
+    for frame_dir in CAMERA_FRAME_DIR.iterdir():
+        if frame_dir.is_dir() and frame_dir.stat().st_mtime < cutoff:
+            shutil.rmtree(frame_dir, ignore_errors=True)
+
+
+def _camera_frame_job_dir(job_id: str) -> Path:
+    return CAMERA_FRAME_DIR / job_id
+
+
+def _camera_frame_url_prefix(job_id: str) -> str:
+    return f"/camera-frames/{job_id}"
+
+
+def _camera_video_frame_limit() -> int | None:
+    return None if MAX_CAMERA_VIDEO_FRAMES == 0 else MAX_CAMERA_VIDEO_FRAMES
+
+
+def _delete_camera_frame_job_dir(job_id: str) -> None:
+    shutil.rmtree(_camera_frame_job_dir(job_id), ignore_errors=True)
+
+
 async def _write_upload_to_temp_file(
     file: UploadFile,
     suffix: str,
@@ -545,6 +587,7 @@ async def _write_chunks_to_temp_file(
 
 
 def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
+    frame_dir = _camera_frame_job_dir(job_id) if suffix == ".bag" else None
     try:
         logger.info("analysis_job_started job_id=%s source_type=%s", job_id, suffix.removeprefix("."))
         if suffix == ".csv":
@@ -552,6 +595,8 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
             summary = analyze_csv(temp_path).to_dict()
             update_job(job_id, progress=90, stage="CSV 분석 결과 정리 중")
         else:
+            if frame_dir is not None:
+                shutil.rmtree(frame_dir, ignore_errors=True)
             summary = analyze_bag(
                 temp_path,
                 allow_reindex=True,
@@ -561,7 +606,12 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
                     progress=progress,
                     stage=stage,
                 ),
+                camera_frame_dir=frame_dir,
+                camera_frame_url_prefix=_camera_frame_url_prefix(job_id),
+                max_camera_frames=_camera_video_frame_limit(),
             ).to_dict()
+            if frame_dir is not None and not summary.get("camera_frames"):
+                shutil.rmtree(frame_dir, ignore_errors=True)
 
         update_job(job_id, status="completed", progress=100, stage="분석 완료", result=summary)
         logger.info("analysis_job_completed job_id=%s source_type=%s", job_id, suffix.removeprefix("."))
@@ -573,6 +623,7 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
             exc,
         )
         update_job(job_id, status="failed", progress=100, stage="분석 실패", error=str(exc))
+        _delete_camera_frame_job_dir(job_id)
     except Exception as exc:
         logger.exception(
             "analysis_job_failed job_id=%s source_type=%s reason=unexpected",
@@ -588,6 +639,7 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
             },
         )
         update_job(job_id, status="failed", progress=100, stage="분석 실패", error=f"예상하지 못한 오류: {exc}")
+        _delete_camera_frame_job_dir(job_id)
     finally:
         temp_path.unlink(missing_ok=True)
         _release_upload_reservation(job_id)

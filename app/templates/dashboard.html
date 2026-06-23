@@ -6,7 +6,7 @@
     <title>Autodriving Sensor QA</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/pagination.js?v=2" defer></script>
-    <script src="/static/camera-player.js?v=1" defer></script>
+    <script src="/static/camera-player.js?v=2" defer></script>
     <script src="/static/upload-progress.js?v=6" defer></script>
   </head>
   <body>
@@ -139,10 +139,12 @@
           <span class="status good">{{ summary.camera_frames | length }} frames</span>
         </div>
         {% set first_frame = summary.camera_frames[0] %}
+        {% set first_frame_src = first_frame.image_url or first_frame.data_url %}
+        <script type="application/json" data-camera-frame-manifest>{{ summary.camera_frames | tojson }}</script>
         <div class="camera-player">
           <div class="camera-screen">
             <img
-              src="{{ first_frame.data_url }}"
+              src="{{ first_frame_src }}"
               alt="{{ first_frame.topic }} camera video frame"
               data-camera-player-image
             >
@@ -168,18 +170,18 @@
         </div>
         <div class="camera-frame-strip" aria-label="camera frames">
           {% for frame in summary.camera_frames %}
+          {% if loop.index0 < 120 %}
+          {% set frame_src = frame.image_url or frame.data_url %}
           <button
             type="button"
             class="camera-thumb{% if loop.first %} active{% endif %}"
             data-camera-frame
             data-frame-index="{{ loop.index0 }}"
-            data-frame-topic="{{ frame.topic }}"
-            data-frame-timestamp="{{ frame.timestamp }}"
-            data-frame-meta="{{ frame.width }}x{{ frame.height }} · {{ frame.encoding }}"
             aria-label="{{ frame.topic }} frame {{ loop.index }}"
           >
-            <img src="{{ frame.data_url }}" alt="" loading="lazy">
+            <img src="{{ frame_src }}" alt="" loading="lazy">
           </button>
+          {% endif %}
           {% endfor %}
         </div>
       </section>

@@ -23,6 +23,20 @@ def test_sample_no_gps_bag_detects_missing_gps():
     assert summary.camera_frames[0].data_url.startswith("data:image/jpeg;base64,")
 
 
+def test_sample_bag_can_store_camera_frames_as_files(tmp_path):
+    summary = analyze_bag(
+        DATA_DIR / "sample_no_gps_5s.bag",
+        camera_frame_dir=tmp_path,
+        camera_frame_url_prefix="/camera-frames/test-job",
+        max_camera_frames=None,
+    )
+
+    assert summary.camera_frames
+    assert summary.camera_frames[0].data_url == ""
+    assert summary.camera_frames[0].image_url == "/camera-frames/test-job/frame_000000.jpg"
+    assert (tmp_path / "frame_000000.jpg").exists()
+
+
 def test_sample_no_vehicle_motion_bag_detects_missing_vehicle_motion():
     summary = analyze_bag(DATA_DIR / "sample_no_vehicle_motion_5s.bag")
 

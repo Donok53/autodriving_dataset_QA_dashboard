@@ -15,6 +15,7 @@ function frameDelay(frames, currentIndex, nextIndex) {
 
 function initCameraPlayer(player) {
   const image = player.querySelector("[data-camera-player-image]");
+  const manifest = player.querySelector("[data-camera-frame-manifest]");
   const playButton = player.querySelector("[data-camera-play]");
   const previousButton = player.querySelector("[data-camera-prev]");
   const nextButton = player.querySelector("[data-camera-next]");
@@ -23,16 +24,34 @@ function initCameraPlayer(player) {
   const topic = player.querySelector("[data-camera-topic]");
   const details = player.querySelector("[data-camera-details]");
   const frameButtons = Array.from(player.querySelectorAll("[data-camera-frame]"));
-  const frames = frameButtons.map((button) => {
-    const thumb = button.querySelector("img");
-    return {
-      button,
-      src: thumb?.getAttribute("src") || "",
-      topic: button.dataset.frameTopic || "",
-      timestamp: button.dataset.frameTimestamp || "",
-      meta: button.dataset.frameMeta || "",
-    };
-  });
+
+  let manifestFrames = [];
+  try {
+    manifestFrames = JSON.parse(manifest?.textContent || "[]");
+  } catch {
+    manifestFrames = [];
+  }
+
+  const frames = manifestFrames.map((frame) => ({
+    src: frame.image_url || frame.data_url || "",
+    topic: frame.topic || "",
+    timestamp: frame.timestamp || "",
+    meta: `${frame.width || 0}x${frame.height || 0} · ${frame.encoding || ""}`,
+  })).filter((frame) => frame.src);
+
+  if (frames.length === 0) {
+    frameButtons.forEach((button) => {
+      const thumb = button.querySelector("img");
+      frames.push({
+        src: thumb?.getAttribute("src") || "",
+        topic: button.dataset.frameTopic || "",
+        timestamp: button.dataset.frameTimestamp || "",
+        meta: button.dataset.frameMeta || "",
+      });
+    });
+  }
+
+  const thumbnailIndexes = frameButtons.map((button) => Number(button.dataset.frameIndex || 0));
 
   if (!image || !playButton || frames.length === 0) {
     return;
@@ -61,7 +80,7 @@ function initCameraPlayer(player) {
     }
 
     frameButtons.forEach((button, buttonIndex) => {
-      button.classList.toggle("active", buttonIndex === currentIndex);
+      button.classList.toggle("active", thumbnailIndexes[buttonIndex] === currentIndex);
     });
   }
 
@@ -120,7 +139,7 @@ function initCameraPlayer(player) {
   frameButtons.forEach((button, index) => {
     button.addEventListener("click", () => {
       stopPlayback();
-      setFrame(index);
+      setFrame(thumbnailIndexes[index]);
     });
   });
 

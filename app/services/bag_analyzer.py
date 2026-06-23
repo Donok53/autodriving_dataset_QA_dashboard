@@ -67,6 +67,15 @@ class BagReadResult:
     camera_frames: list[CameraFramePreview] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class EncodedCameraImage:
+    payload: bytes
+    content_type: str
+    width: int
+    height: int
+    encoding: str
+
+
 ProgressCallback = Callable[[int, str], None]
 
 
@@ -75,6 +84,9 @@ def analyze_bag(
     max_messages: int = MAX_BAG_MESSAGES,
     progress_callback: ProgressCallback | None = None,
     allow_reindex: bool = False,
+    camera_frame_dir: Path | None = None,
+    camera_frame_url_prefix: str | None = None,
+    max_camera_frames: int | None = MAX_CAMERA_PREVIEW_FRAMES,
 ) -> AnalysisSummary:
     if not path.exists() or path.stat().st_size == 0:
         raise InvalidBagFileError("비어 있거나 존재하지 않는 bag 파일입니다.")
@@ -82,14 +94,28 @@ def analyze_bag(
     try:
         _notify_progress(progress_callback, 15, "bag 메타데이터 읽는 중")
         try:
-            read_result = read_bag(path, max_messages=max_messages, progress_callback=progress_callback)
+            read_result = read_bag(
+                path,
+                max_messages=max_messages,
+                progress_callback=progress_callback,
+                camera_frame_dir=camera_frame_dir,
+                camera_frame_url_prefix=camera_frame_url_prefix,
+                max_camera_frames=max_camera_frames,
+            )
         except Exception as exc:
             if not allow_reindex or not _is_reindexable_bag_error(exc):
                 raise
             _notify_progress(progress_callback, 20, "bag index 복구 중")
             _reindex_bag(path)
             _notify_progress(progress_callback, 30, "복구된 bag 메타데이터 읽는 중")
-            read_result = read_bag(path, max_messages=max_messages, progress_callback=progress_callback)
+            read_result = read_bag(
+                path,
+                max_messages=max_messages,
+                progress_callback=progress_callback,
+                camera_frame_dir=camera_frame_dir,
+                camera_frame_url_prefix=camera_frame_url_prefix,
+                max_camera_frames=max_camera_frames,
+            )
         _notify_progress(progress_callback, 90, "분석 결과 정리 중")
     except Exception as exc:
         raise InvalidBagFileError(f"bag 파일을 읽을 수 없습니다: {exc}") from exc
@@ -101,6 +127,9 @@ def read_bag(
     path: Path,
     max_messages: int = MAX_BAG_MESSAGES,
     progress_callback: ProgressCallback | None = None,
+    camera_frame_dir: Path | None = None,
+    camera_frame_url_prefix: str | None = None,
+    max_camera_frames: int | None = MAX_CAMERA_PREVIEW_FRAMES,
 ) -> BagReadResult:
     with AnyReader([path]) as reader:
         total_to_process = min(int(reader.message_count), max_messages)
@@ -127,7 +156,7 @@ def read_bag(
                 or "NavSatFix" in connection.msgtype
                 or (
                     connection.topic == camera_preview_topic
-                    and len(camera_frames) < MAX_CAMERA_PREVIEW_FRAMES
+                    and _can_collect_camera_frame(len(camera_frames), max_camera_frames)
                 )
             )
             if should_decode_message:
@@ -152,13 +181,16 @@ def read_bag(
             if (
                 connection.topic == camera_preview_topic
                 and message is not None
-                and len(camera_frames) < MAX_CAMERA_PREVIEW_FRAMES
+                and _can_collect_camera_frame(len(camera_frames), max_camera_frames)
             ):
                 frame = _build_camera_frame_preview(
                     topic=connection.topic,
                     msgtype=connection.msgtype,
                     message=message,
                     timestamp_ns=effective_timestamp,
+                    frame_index=len(camera_frames),
+                    camera_frame_dir=camera_frame_dir,
+                    camera_frame_url_prefix=camera_frame_url_prefix,
                 )
                 if frame is not None:
                     camera_frames.append(frame)
@@ -303,40 +335,86 @@ def _camera_preview_topic_score(topic: str, msgtype: str) -> int:
     return score
 
 
+def _can_collect_camera_frame(current_count: int, max_camera_frames: int | None) -> bool:
+    return max_camera_frames is None or current_count < max_camera_frames
+
+
 def _build_camera_frame_preview(
     *,
     topic: str,
     msgtype: str,
     message,
     timestamp_ns: int,
+    frame_index: int,
+    camera_frame_dir: Path | None = None,
+    camera_frame_url_prefix: str | None = None,
 ) -> CameraFramePreview | None:
     try:
-        if msgtype == "sensor_msgs/msg/CompressedImage":
-            data_url, width, height, encoding = _compressed_image_data_url(message)
-        else:
-            data_url, width, height, encoding = _raw_image_data_url(message)
+        image = _encode_camera_image(message, msgtype)
     except Exception:
         return None
+
+    image_url = None
+    data_url = ""
+    if camera_frame_dir is not None and camera_frame_url_prefix is not None:
+        image_path = _write_camera_frame_file(camera_frame_dir, frame_index, image)
+        image_url = f"{camera_frame_url_prefix.rstrip('/')}/{image_path.name}"
+    else:
+        data_url = _camera_image_data_url(image)
 
     return CameraFramePreview(
         topic=topic,
         timestamp=_format_ns(timestamp_ns),
-        width=width,
-        height=height,
-        encoding=encoding,
+        width=image.width,
+        height=image.height,
+        encoding=image.encoding,
         data_url=data_url,
+        image_url=image_url,
     )
 
 
-def _compressed_image_data_url(message) -> tuple[str, int, int, str]:
+def _encode_camera_image(message, msgtype: str) -> EncodedCameraImage:
+    if msgtype == "sensor_msgs/msg/CompressedImage":
+        return _compressed_image_payload(message)
+    return _raw_image_payload(message)
+
+
+def _write_camera_frame_file(
+    camera_frame_dir: Path,
+    frame_index: int,
+    image: EncodedCameraImage,
+) -> Path:
+    camera_frame_dir.mkdir(parents=True, exist_ok=True)
+    extension = _camera_image_extension(image.content_type)
+    image_path = camera_frame_dir / f"frame_{frame_index:06d}.{extension}"
+    image_path.write_bytes(image.payload)
+    return image_path
+
+
+def _camera_image_extension(content_type: str) -> str:
+    if content_type == "image/png":
+        return "png"
+    return "jpg"
+
+
+def _camera_image_data_url(image: EncodedCameraImage) -> str:
+    return "data:{};base64,{}".format(image.content_type, base64.b64encode(image.payload).decode("ascii"))
+
+
+def _compressed_image_payload(message) -> EncodedCameraImage:
     raw = _message_data_bytes(message)
     content_type = _compressed_image_content_type(raw, str(getattr(message, "format", "")))
     width, height = _image_size_from_bytes(raw)
-    data_url = "data:{};base64,{}".format(content_type, base64.b64encode(raw).decode("ascii"))
-    return data_url, width, height, str(getattr(message, "format", "compressed"))
+    return EncodedCameraImage(
+        payload=raw,
+        content_type=content_type,
+        width=width,
+        height=height,
+        encoding=str(getattr(message, "format", "compressed")),
+    )
 
 
-def _raw_image_data_url(message) -> tuple[str, int, int, str]:
+def _raw_image_payload(message) -> EncodedCameraImage:
     from PIL import Image as PILImage
     import numpy as np
 
@@ -372,8 +450,13 @@ def _raw_image_data_url(message) -> tuple[str, int, int, str]:
 
     buffer = BytesIO()
     pil_image.save(buffer, format="JPEG", quality=78)
-    data_url = "data:image/jpeg;base64,{}".format(base64.b64encode(buffer.getvalue()).decode("ascii"))
-    return data_url, width, height, encoding
+    return EncodedCameraImage(
+        payload=buffer.getvalue(),
+        content_type="image/jpeg",
+        width=width,
+        height=height,
+        encoding=encoding,
+    )
 
 
 def _encoding_channels(encoding: str) -> int:

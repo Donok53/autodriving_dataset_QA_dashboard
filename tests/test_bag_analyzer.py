@@ -117,7 +117,7 @@ def test_analyze_bag_reindexes_damaged_upload_copy(tmp_path, monkeypatch):
     bag_path.write_bytes(b"bag")
     calls = {"read": 0, "reindex": 0}
 
-    def fake_read_bag(path, max_messages, progress_callback):
+    def fake_read_bag(path, max_messages, progress_callback, **kwargs):
         calls["read"] += 1
         if calls["read"] == 1:
             raise RuntimeError("Bag index looks damaged")
