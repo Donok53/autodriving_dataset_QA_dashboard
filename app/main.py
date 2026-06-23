@@ -14,10 +14,13 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.routers.xai import router as xai_router
 from app.services.bag_analyzer import InvalidBagFileError, analyze_bag
 from app.services.analyzer import InvalidSensorLogError, analyze_csv
 from app.services.issue_reporter import report_unexpected_error
 from app.services.job_store import create_job, get_job, update_job
+from app.services.model_service import get_model_info
+from app.services.xai_log_analyzer import InvalidXaiLogError, analyze_sample_xai_log
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "sample_sensor_log.csv"
@@ -71,6 +74,7 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), name="static")
+app.include_router(xai_router)
 
 
 class UploadTooLargeError(ValueError):
@@ -205,8 +209,39 @@ def _dashboard_response(
             "has_result": summary is not None,
             "upload_limit_bytes": None if local_unlimited_upload else MAX_UPLOAD_BYTES,
             "upload_limit_label": "제한 없음" if local_unlimited_upload else MAX_UPLOAD_SIZE_LABEL,
+            "xai_model_info": _safe_xai_model_info(),
+            "xai_sample_summary": _safe_xai_sample_summary(),
         },
     )
+
+
+def _safe_xai_model_info() -> dict[str, object]:
+    try:
+        return get_model_info()
+    except Exception as exc:
+        logger.warning("xai_model_info_unavailable error=%s", exc)
+        return {
+            "model_name": "xai_student_model",
+            "version": "unknown",
+            "status": "unavailable",
+            "model_available": False,
+        }
+
+
+def _safe_xai_sample_summary() -> dict[str, object]:
+    try:
+        return analyze_sample_xai_log()
+    except (InvalidXaiLogError, OSError, ValueError) as exc:
+        logger.warning("xai_sample_summary_unavailable error=%s", exc)
+        return {
+            "total_explanations": 0,
+            "normal_count": 0,
+            "safety_stop_count": 0,
+            "avoidance_count": 0,
+            "arrival_count": 0,
+            "representative_explanations": [],
+            "latest_explanation": "",
+        }
 
 
 def _is_local_unlimited_upload(request: Request) -> bool:

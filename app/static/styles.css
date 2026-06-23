@@ -203,6 +203,7 @@ h1 {
 
 .summary-strip,
 .metric-grid,
+.xai-grid,
 .two-column {
   display: grid;
   gap: 16px;
@@ -210,6 +211,10 @@ h1 {
 
 .summary-strip {
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.xai-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .stat-card,
@@ -342,6 +347,22 @@ th {
   gap: 10px;
 }
 
+.xai-explanations {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.xai-explanations p {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .event-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -412,6 +433,7 @@ th {
 
   .summary-strip,
   .metric-grid,
+  .xai-grid,
   .two-column {
     grid-template-columns: 1fr;
   }

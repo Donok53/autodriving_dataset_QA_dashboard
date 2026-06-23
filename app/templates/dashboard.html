@@ -88,6 +88,48 @@
         </article>
       </section>
 
+      <section class="panel xai-panel">
+        <div class="section-title">
+          <h2>XAI/VLM 모델 결과</h2>
+          <span class="status {% if xai_model_info.model_available %}good{% else %}warn{% endif %}">
+            {{ xai_model_info.status }}
+          </span>
+        </div>
+        <div class="xai-grid">
+          <article class="stat-card">
+            <span>현재 모델</span>
+            <strong>{{ xai_model_info.model_name }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>모델 버전</span>
+            <strong>{{ xai_model_info.version }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>XAI 설명 수</span>
+            <strong>{{ xai_sample_summary.total_explanations }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>안전/정지</span>
+            <strong>{{ xai_sample_summary.safety_stop_count }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>회피</span>
+            <strong>{{ xai_sample_summary.avoidance_count }}</strong>
+          </article>
+          <article class="stat-card">
+            <span>목적지 도착</span>
+            <strong>{{ xai_sample_summary.arrival_count }}</strong>
+          </article>
+        </div>
+        <div class="xai-explanations">
+          {% for explanation in xai_sample_summary.representative_explanations %}
+          <p>{{ explanation }}</p>
+          {% else %}
+          <p class="empty">샘플 XAI 설명이 없습니다.</p>
+          {% endfor %}
+        </div>
+      </section>
+
       {% if has_result %}
       {% if summary.topic_profiles %}
       <section class="panel" data-paginated data-page-size="10">

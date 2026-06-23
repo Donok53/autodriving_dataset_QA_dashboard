@@ -18,6 +18,8 @@ Render에 배포된 서비스는 아래 주소에서 바로 확인할 수 있습
 - camera, lidar, imu, gps, 차량 움직임 명령(cmd_vel)의 동기화 상태를 요약합니다.
 - 급가속, 급제동, GPS jump, 센서 dropout 이벤트를 탐지합니다.
 - ROS bag 파일의 토픽 주기, 메시지 수, 핵심 데이터 스트림 커버리지, timestamp gap을 검사합니다.
+- XAI/VLM student 모델 버전과 샘플 설명 결과를 대시보드와 API에서 확인합니다.
+- `/xai/vlm_log` JSON을 요약하여 정상 주행, 안전 정지, 회피, 목적지 도착 이벤트를 집계합니다.
 - GitHub Actions, Docker, Render 배포 흐름을 연결할 수 있는 구조로 개발합니다.
 
 ## 기술 스택
@@ -25,6 +27,9 @@ Render에 배포된 서비스는 아래 주소에서 바로 확인할 수 있습
 - Python
 - FastAPI
 - Pandas
+- NumPy
+- Scikit-learn
+- Joblib
 - Pytest
 - Rosbags
 - Docker
@@ -183,6 +188,29 @@ Render 배포는 `render.yaml`을 기준으로 Docker Web Service를 생성하�
 
 공개 배포 환경에서는 안정적인 운영을 위해 파일 1개당 100MB, 동시 업로드 임시 저장소 300MB 제한을 적용했습니다. 더 큰 bag 파일 검증은 로컬 Docker 실행 환경에서 확인할 수 있습니다.
 
+## XAI/VLM MLOps 확장
+
+대시보드는 ROS 전체 runtime을 Render 안에서 실행하지 않고, 로컬 ROS 환경에서 생성된 `/xai/vlm_log` 결과와 MLflow로 승격된 student 모델 메타데이터를 웹에서 확인하는 구조로 확장했습니다.
+
+주요 API:
+
+| API | 설명 |
+| --- | --- |
+| `/api/xai/health` | XAI API 상태 확인 |
+| `/api/xai/model-info` | 현재 서비스 모델 메타데이터와 모델 파일 존재 여부 반환 |
+| `/api/xai/sample-result` | 샘플 `/xai/vlm_log` 요약 반환 |
+| `/api/xai/log-summary` | JSON payload로 받은 XAI 로그를 정상/정지/회피/도착 기준으로 요약 |
+| `/api/xai/predict` | `MODEL_PATH` 또는 `models/current`의 student 모델로 예측 실행 |
+
+현재 서비스 모델 정보는 `models/current/model_info.json`에 저장합니다. MLflow에서 champion 모델을 선택한 뒤 `models/current/student_baseline.joblib`로 승격하면 대시보드가 같은 경로를 사용합니다.
+
+```bash
+curl http://127.0.0.1:8000/api/xai/model-info
+curl http://127.0.0.1:8000/api/xai/sample-result
+```
+
+로컬 ROS runtime은 `xai_autonomy_vlm_teacher_distill` 저장소에서 실행하고, Render 서비스는 샘플 결과와 모델 버전 확인용으로 유지합니다. 실제 bag replay, overlay 생성, `/xai/vlm_log` record는 로컬 ROS/Noetic 환경에서 수행하는 것을 권장합니다.
+
 ## 운영 로그와 자동 이슈 생성
 
 애플리케이션은 요청 처리, 업로드 작업, 분석 작업의 주요 상태를 표준 로그로 남깁니다. Render에서는 서비스의 Logs 화면에서 `error`, `warning`, `job_id`, `request_id` 같은 키워드로 검색할 수 있습니다.
@@ -262,8 +290,12 @@ bag 샘플은 GitHub 업로드 제한과 배포 환경을 고려해 raw image/po
 app/
   main.py                  FastAPI 엔트리포인트
   models.py                분석 결과 모델
+  routers/
+    xai.py                 XAI/VLM API
   services/
     analyzer.py            통합 분석 파이프라인
+    model_service.py       현재 student 모델 메타데이터 및 예측
+    xai_log_analyzer.py    /xai/vlm_log JSON 요약
     loader.py              CSV 로딩 및 정규화
     quality_checker.py     품질 검사
     sync_checker.py        센서 동기화 분석
@@ -272,6 +304,11 @@ app/
   static/
 data/
   sample_sensor_log.csv
+  xai_samples/
+    sample_vlm_log.json
+models/
+  current/
+    model_info.json
 scripts/
   run_docker.ps1           Windows Docker 실행 스크립트
   run_docker.sh            macOS/Linux/WSL Docker 실행 스크립트

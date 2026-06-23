@@ -26,6 +26,25 @@ def test_sample_analysis_api_returns_summary():
     assert len(payload["events"]) > 0
 
 
+def test_xai_model_info_api_returns_metadata():
+    response = client.get("/api/xai/model-info")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["model_name"] == "xai_student_model"
+    assert "model_available" in payload
+
+
+def test_xai_sample_result_api_returns_summary():
+    response = client.get("/api/xai/sample-result")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_explanations"] == 4
+    assert payload["avoidance_count"] == 1
+    assert payload["safety_stop_count"] == 1
+
+
 def test_dashboard_renders_html():
     response = client.get("/")
 
