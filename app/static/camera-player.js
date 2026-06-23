@@ -27,6 +27,7 @@ function initCameraPlayer(player) {
   const xaiMode = player.querySelector("[data-camera-xai-mode]");
   const xaiTopic = player.querySelector("[data-camera-xai-topic]");
   const xaiExplanation = player.querySelector("[data-camera-xai-explanation]");
+  const xaiEvidence = player.querySelector("[data-camera-xai-evidence]");
   const frameButtons = Array.from(player.querySelectorAll("[data-camera-frame]"));
 
   let manifestFrames = [];
@@ -105,10 +106,15 @@ function initCameraPlayer(player) {
       xaiMode.textContent = overlay.driving_mode_ko || overlay.event_label || "XAI";
     }
     if (xaiTopic) {
-      xaiTopic.textContent = overlay.source_topic || overlay.timestamp || "";
+      const delta = Number.isFinite(Number(overlay.delta_ms)) ? ` · ${overlay.delta_ms}ms` : "";
+      xaiTopic.textContent = `${overlay.source_topic || overlay.timestamp || ""}${delta}`;
     }
     if (xaiExplanation) {
       xaiExplanation.textContent = explanation;
+    }
+    if (xaiEvidence) {
+      xaiEvidence.textContent = overlay.evidence ? `근거: ${overlay.evidence}` : "";
+      xaiEvidence.hidden = !overlay.evidence;
     }
   }
 

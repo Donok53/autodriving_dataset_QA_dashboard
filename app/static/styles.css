@@ -444,6 +444,13 @@ th {
   line-height: 1.45;
 }
 
+.camera-xai-overlay small {
+  color: #b8c7dc;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .camera-controls {
   display: grid;
   grid-template-columns: auto auto auto minmax(160px, 1fr) auto;

@@ -53,7 +53,7 @@ def test_dashboard_renders_html():
     assert "자율주행 센서 로그 품질 대시보드" in response.text
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
-    assert "camera-player.js?v=3" in response.text
+    assert "camera-player.js?v=4" in response.text
     assert "upload-progress.js?v=6" in response.text
     assert "analysis-progress-panel" in response.text
     assert 'data-max-upload-bytes="10737418240"' in response.text
@@ -175,6 +175,8 @@ def test_job_result_renders_bag_xai_log_summary():
                         "driving_mode_ko": "장애물 회피",
                         "event_label": "avoidance",
                         "explanation": "전방 장애물을 피해 좌측 회피한다.",
+                        "evidence": "avoidance: front obstacle detected",
+                        "delta_ms": 0.0,
                     },
                 }
             ],
@@ -208,6 +210,7 @@ def test_job_result_renders_bag_xai_log_summary():
     assert "/xai/vlm_log" in response.text
     assert "전방 장애물을 피해 좌측 회피한다." in response.text
     assert "data-camera-xai-overlay" in response.text
+    assert "data-camera-xai-evidence" in response.text
     assert "xai_overlay" in response.text
 
 

@@ -140,6 +140,64 @@ def test_build_bag_summary_generates_xai_log_from_topics_when_missing():
     assert payload["camera_frames"][0]["xai_overlay"]["explanation"]
 
 
+def test_build_bag_summary_normalizes_event_log_and_matches_near_frames_only():
+    base = 1_700_000_000_000_000_000
+    summary = build_bag_summary(
+        BagReadResult(
+            topic_series=[
+                BagTopicSeries(
+                    topic="/xai/event_log",
+                    msgtype="std_msgs/msg/String",
+                    sensor="other",
+                    message_count=1,
+                    timestamps_ns=[base],
+                )
+            ],
+            total_message_count=3,
+            processed_message_count=3,
+            start_time_ns=base,
+            end_time_ns=base + 10_000_000_000,
+            imu_events=[],
+            gps_events=[],
+            camera_frames=[
+                CameraFramePreview(
+                    topic="/camera/color/image_raw",
+                    timestamp="2023-11-14T22:13:20.050+00:00",
+                    width=640,
+                    height=480,
+                    encoding="rgb8",
+                    data_url="data:image/jpeg;base64,test",
+                ),
+                CameraFramePreview(
+                    topic="/camera/color/image_raw",
+                    timestamp="2023-11-14T22:13:30.000+00:00",
+                    width=640,
+                    height=480,
+                    encoding="rgb8",
+                    data_url="data:image/jpeg;base64,test",
+                ),
+            ],
+            xai_records=[
+                {
+                    "_topic": "/xai/event_log",
+                    "_timestamp": "2023-11-14T22:13:20.000+00:00",
+                    "data": "avoidance: front obstacle detected",
+                }
+            ],
+        )
+    )
+
+    payload = summary.to_dict()
+
+    assert payload["xai_summary"]["topics"] == ["/xai/vlm_log"]
+    assert payload["xai_summary"]["source_topics"] == ["/xai/event_log"]
+    assert payload["camera_frames"][0]["xai_overlay"]["source_topic"] == "/xai/event_log"
+    assert payload["camera_frames"][0]["xai_overlay"]["delta_ms"] == 50.0
+    assert "front obstacle" in payload["camera_frames"][0]["xai_overlay"]["evidence"]
+    assert "front obstacle" in payload["camera_frames"][0]["xai_overlay"]["explanation"]
+    assert payload["camera_frames"][1]["xai_overlay"] is None
+
+
 def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
     base = 1_700_000_000_000_000_000
     summary = build_bag_summary(

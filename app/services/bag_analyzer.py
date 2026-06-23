@@ -7,7 +7,7 @@ import math
 import os
 import shutil
 import subprocess
-from bisect import bisect_left, bisect_right
+from bisect import bisect_left
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -43,6 +43,7 @@ MAX_BAG_MESSAGES = 500_000
 MAX_EVENT_COUNT = 30
 MAX_CAMERA_PREVIEW_FRAMES = _read_positive_int_env("MAX_CAMERA_PREVIEW_FRAMES", 60)
 MAX_XAI_LOG_RECORDS = _read_positive_int_env("MAX_XAI_LOG_RECORDS", 10_000)
+XAI_OVERLAY_MATCH_WINDOW_MS = _read_positive_int_env("XAI_OVERLAY_MATCH_WINDOW_MS", 2_000)
 XAI_OVERLAY_TOPIC_HINTS = ("student_xai", "rich_overlay", "overlay", "vlm", "/xai")
 XAI_LOG_TOPIC_HINTS = ("xai/vlm_log", "vlm_log", "rich_reason", "camera_reason", "student_xai")
 
@@ -451,12 +452,14 @@ def _normalize_xai_record(record: dict[str, Any]) -> dict[str, Any]:
     explanation = _xai_explanation_text(normalized)
     if not explanation:
         explanation = _generate_xai_reason(event_label, driving_mode, source_topic, normalized)
+    evidence = _xai_evidence_text(normalized)
 
     normalized["event_label"] = event_label
     normalized["prediction"] = str(normalized.get("prediction") or event_label)
     normalized["driving_mode_ko"] = driving_mode
     normalized["driving_reason_ko"] = explanation
     normalized["explanation"] = explanation
+    normalized["evidence"] = evidence
     return normalized
 
 
@@ -594,6 +597,14 @@ def _xai_explanation_text(record: dict[str, Any]) -> str:
     ).strip()
 
 
+def _xai_evidence_text(record: dict[str, Any]) -> str:
+    for key in ("data", "event", "status", "state", "label", "type", "name", "message"):
+        value = record.get(key)
+        if value:
+            return str(value).strip()
+    return ""
+
+
 def _generate_xai_reason(
     event_label: str,
     driving_mode: str,
@@ -601,6 +612,19 @@ def _generate_xai_reason(
     record: dict[str, Any],
 ) -> str:
     source = source_topic or "bag topic"
+    raw_hint = _xai_evidence_text(record)
+    if raw_hint:
+        evidence = raw_hint[:120]
+        if event_label == "avoidance":
+            return f"{source} 메시지({evidence})를 근거로 {driving_mode}으로 판단했습니다."
+        if event_label == "safety_stop":
+            return f"{source} 메시지({evidence})를 근거로 {driving_mode}로 판단했습니다."
+        if event_label == "blocked":
+            return f"{source} 메시지({evidence})를 근거로 {driving_mode}으로 판단했습니다."
+        if event_label == "goal_arrival":
+            return f"{source} 메시지({evidence})를 근거로 {driving_mode}으로 판단했습니다."
+        return f"{source} 메시지({evidence})를 기반으로 {driving_mode} 상태를 생성했습니다."
+
     if event_label == "avoidance":
         return f"{source} 토픽에서 회피 관련 이벤트가 감지되어 {driving_mode}으로 판단했습니다."
     if event_label == "safety_stop":
@@ -610,9 +634,6 @@ def _generate_xai_reason(
     if event_label == "goal_arrival":
         return f"{source} 토픽에서 목적지 도착 신호가 감지되어 {driving_mode}으로 판단했습니다."
 
-    raw_hint = str(record.get("data") or record.get("event") or record.get("status") or "").strip()
-    if raw_hint:
-        return f"{source} 토픽 메시지({raw_hint[:80]})를 기반으로 {driving_mode} 상태를 생성했습니다."
     return f"{source} 토픽 흐름을 기반으로 {driving_mode} 상태를 생성했습니다."
 
 
@@ -652,6 +673,7 @@ def _attach_xai_overlays(
         return camera_frames
 
     timestamps = [timestamp_ns for timestamp_ns, _ in timeline]
+    match_window_ns = XAI_OVERLAY_MATCH_WINDOW_MS * 1_000_000
     frames = []
     for frame in camera_frames:
         frame_timestamp_ns = _timestamp_to_ns(frame.timestamp)
@@ -659,15 +681,39 @@ def _attach_xai_overlays(
             frames.append(frame)
             continue
 
-        record_index = bisect_right(timestamps, frame_timestamp_ns) - 1
-        if record_index < 0:
-            record_index = 0
-        record = timeline[record_index][1]
-        frames.append(replace(frame, xai_overlay=_camera_xai_overlay(record)))
+        record_index = _nearest_timeline_index(timestamps, frame_timestamp_ns)
+        record_timestamp_ns, record = timeline[record_index]
+        delta_ns = abs(frame_timestamp_ns - record_timestamp_ns)
+        if delta_ns > match_window_ns and not _is_single_generated_normal_record(timeline):
+            frames.append(frame)
+            continue
+
+        frames.append(replace(frame, xai_overlay=_camera_xai_overlay(record, delta_ns)))
     return frames
 
 
-def _camera_xai_overlay(record: dict[str, Any]) -> dict[str, object]:
+def _nearest_timeline_index(timestamps: list[int], target_ns: int) -> int:
+    insert_at = bisect_left(timestamps, target_ns)
+    if insert_at <= 0:
+        return 0
+    if insert_at >= len(timestamps):
+        return len(timestamps) - 1
+    before = timestamps[insert_at - 1]
+    after = timestamps[insert_at]
+    return insert_at - 1 if abs(target_ns - before) <= abs(after - target_ns) else insert_at
+
+
+def _is_single_generated_normal_record(timeline: list[tuple[int, dict[str, Any]]]) -> bool:
+    if len(timeline) != 1:
+        return False
+    record = timeline[0][1]
+    return (
+        record.get("event_label") == "normal_route"
+        and record.get("_source_topic") == "generated_from_bag_topics"
+    )
+
+
+def _camera_xai_overlay(record: dict[str, Any], delta_ns: int) -> dict[str, object]:
     return {
         "timestamp": record.get("_timestamp") or record.get("timestamp") or "",
         "source_topic": record.get("_source_topic") or record.get("_topic") or "",
@@ -676,6 +722,8 @@ def _camera_xai_overlay(record: dict[str, Any]) -> dict[str, object]:
         ),
         "event_label": record.get("event_label") or record.get("prediction") or "",
         "explanation": record.get("explanation") or record.get("driving_reason_ko") or "",
+        "evidence": record.get("evidence") or "",
+        "delta_ms": round(delta_ns / 1_000_000, 1),
     }
 
 
