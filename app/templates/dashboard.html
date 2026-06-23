@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/pagination.js?v=2" defer></script>
     <script src="/static/camera-player.js?v=4" defer></script>
+    <script src="/static/live-vlm.js?v=1" defer></script>
     <script src="/static/upload-progress.js?v=6" defer></script>
   </head>
   <body>
@@ -38,6 +39,33 @@
             <a href="/sample">샘플 데이터</a>
           </div>
         </form>
+      </section>
+
+      <section class="panel live-vlm-panel" data-live-vlm>
+        <div class="section-title">
+          <h2>실시간 VLM 화면</h2>
+          <span class="status good" data-live-vlm-status>로컬 스트림</span>
+        </div>
+        <div class="live-vlm-layout">
+          <div class="live-vlm-screen">
+            <img
+              src="http://127.0.0.1:8090/stream.mjpg"
+              alt="XAI VLM live stream"
+              data-live-vlm-image
+            >
+          </div>
+          <form class="live-vlm-controls" data-live-vlm-form>
+            <label for="live-vlm-url">스트림 주소</label>
+            <input
+              id="live-vlm-url"
+              type="url"
+              value="http://127.0.0.1:8090/stream.mjpg"
+              data-live-vlm-url
+            >
+            <button type="submit">연결</button>
+            <a href="http://127.0.0.1:8090/" target="_blank" rel="noopener" data-live-vlm-open>새 창</a>
+          </form>
+        </div>
       </section>
 
       <section id="analysis-progress-panel" class="progress-panel" aria-live="polite" hidden>

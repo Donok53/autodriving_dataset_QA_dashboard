@@ -54,8 +54,11 @@ def test_dashboard_renders_html():
     assert "CSV/BAG 업로드" in response.text
     assert "pagination.js" in response.text
     assert "camera-player.js?v=4" in response.text
+    assert "live-vlm.js?v=1" in response.text
     assert "upload-progress.js?v=6" in response.text
     assert "analysis-progress-panel" in response.text
+    assert "실시간 VLM 화면" in response.text
+    assert "http://127.0.0.1:8090/stream.mjpg" in response.text
     assert 'data-max-upload-bytes="10737418240"' in response.text
     assert 'data-max-upload-label="10GB"' in response.text
     assert "sample_sensor_log.csv" not in response.text
