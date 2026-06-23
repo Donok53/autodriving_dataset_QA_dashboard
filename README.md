@@ -192,6 +192,14 @@ Render 배포는 `render.yaml`을 기준으로 Docker Web Service를 생성하�
 
 대시보드는 ROS 전체 runtime을 Render 안에서 실행하지 않고, 로컬 ROS 환경에서 생성된 `/xai/vlm_log` 결과와 MLflow로 승격된 student 모델 메타데이터를 웹에서 확인하는 구조로 확장했습니다.
 
+XAI/VLM student 모델의 학습 코드, ROS runtime, overlay 생성 기능은 별도 저장소에서 먼저 개발한 뒤 이 대시보드에 서비스/API 형태로 연결했습니다.
+
+| 구분 | 링크 |
+| --- | --- |
+| XAI/VLM 학습 및 ROS runtime 저장소 | [Donok53/xai_vlm](https://github.com/Donok53/xai_vlm) |
+| XAI/VLM 개발 커밋 이력 | [xai_vlm commits](https://github.com/Donok53/xai_vlm/commits/outdoor-rich-label-training) |
+| 대시보드 통합 커밋 이력 | [QA dashboard commits](https://github.com/Donok53/autodriving_dataset_QA_dashboard/commits/main/) |
+
 주요 API:
 
 | API | 설명 |
