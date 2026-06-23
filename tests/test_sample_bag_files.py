@@ -18,6 +18,9 @@ def test_sample_no_gps_bag_detects_missing_gps():
     assert summary.source_type == "bag"
     assert summary.duration_seconds == 5.0
     assert "gps 계열 데이터가 bag 파일에서 감지되지 않았습니다." in missing_descriptions
+    assert summary.camera_frames
+    assert summary.camera_frames[0].topic == "/camera/color/image_raw"
+    assert summary.camera_frames[0].data_url.startswith("data:image/jpeg;base64,")
 
 
 def test_sample_no_vehicle_motion_bag_detects_missing_vehicle_motion():

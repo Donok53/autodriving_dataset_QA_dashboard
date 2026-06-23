@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+from io import BytesIO
 import math
 from bisect import bisect_left
 from collections.abc import Callable
@@ -14,6 +16,7 @@ from app.models import (
     AnalysisSummary,
     AnomalySegment,
     BagTopicProfile,
+    CameraFramePreview,
     DrivingEvent,
     QualityMetric,
     SensorSyncStatus,
@@ -23,6 +26,7 @@ EXPECTED_SENSORS = ("lidar", "imu", "camera", "gps", "vehicle_motion")
 SENSOR_SORT_ORDER = {sensor: index for index, sensor in enumerate((*EXPECTED_SENSORS, "other"))}
 MAX_BAG_MESSAGES = 500_000
 MAX_EVENT_COUNT = 30
+MAX_CAMERA_PREVIEW_FRAMES = 6
 
 
 class InvalidBagFileError(ValueError):
@@ -47,6 +51,7 @@ class BagReadResult:
     end_time_ns: int
     imu_events: list[DrivingEvent]
     gps_events: list[DrivingEvent]
+    camera_frames: list[CameraFramePreview] = field(default_factory=list)
 
 
 ProgressCallback = Callable[[int, str], None]
@@ -77,6 +82,7 @@ def read_bag(
 ) -> BagReadResult:
     with AnyReader([path]) as reader:
         total_to_process = min(int(reader.message_count), max_messages)
+        camera_preview_topic = _select_camera_preview_topic(reader.topics)
         topic_by_name = {
             topic: BagTopicSeries(
                 topic=topic,
@@ -88,12 +94,21 @@ def read_bag(
         }
         imu_events: list[DrivingEvent] = []
         gps_points: list[tuple[int, float, float]] = []
+        camera_frames: list[CameraFramePreview] = []
         processed_count = 0
 
         for connection, timestamp, rawdata in reader.messages():
             message = None
             effective_timestamp = int(timestamp)
-            if connection.msgtype.endswith("/Imu") or "NavSatFix" in connection.msgtype:
+            should_decode_message = (
+                connection.msgtype.endswith("/Imu")
+                or "NavSatFix" in connection.msgtype
+                or (
+                    connection.topic == camera_preview_topic
+                    and len(camera_frames) < MAX_CAMERA_PREVIEW_FRAMES
+                )
+            )
+            if should_decode_message:
                 message = _deserialize_message(reader, connection.msgtype, rawdata)
                 if message is not None:
                     effective_timestamp = _message_timestamp_ns(message, int(timestamp))
@@ -111,6 +126,20 @@ def read_bag(
                 point = _read_gps_point(message, effective_timestamp)
                 if point is not None:
                     gps_points.append(point)
+
+            if (
+                connection.topic == camera_preview_topic
+                and message is not None
+                and len(camera_frames) < MAX_CAMERA_PREVIEW_FRAMES
+            ):
+                frame = _build_camera_frame_preview(
+                    topic=connection.topic,
+                    msgtype=connection.msgtype,
+                    message=message,
+                    timestamp_ns=effective_timestamp,
+                )
+                if frame is not None:
+                    camera_frames.append(frame)
 
             processed_count += 1
             if processed_count == 1 or processed_count % 5000 == 0 or processed_count == total_to_process:
@@ -131,6 +160,7 @@ def read_bag(
             end_time_ns=int(reader.end_time),
             imu_events=imu_events,
             gps_events=_detect_gps_jump_events(gps_points),
+            camera_frames=camera_frames,
         )
 
 
@@ -154,6 +184,7 @@ def build_bag_summary(read_result: BagReadResult) -> AnalysisSummary:
         events=events,
         source_type="bag",
         topic_profiles=profiles,
+        camera_frames=read_result.camera_frames,
     )
 
 
@@ -170,6 +201,149 @@ def infer_sensor_category(topic: str, msgtype: str) -> str:
     if _is_vehicle_motion_topic(topic, msgtype):
         return "vehicle_motion"
     return "other"
+
+
+def _select_camera_preview_topic(topics) -> str | None:
+    candidates = []
+    for topic, info in topics.items():
+        msgtype = str(info.msgtype)
+        if msgtype not in {"sensor_msgs/msg/Image", "sensor_msgs/msg/CompressedImage"}:
+            continue
+        score = _camera_preview_topic_score(topic, msgtype)
+        if score <= 0:
+            continue
+        candidates.append((score, int(info.msgcount), topic))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    return candidates[0][2]
+
+
+def _camera_preview_topic_score(topic: str, msgtype: str) -> int:
+    text = f"{topic} {msgtype}".lower()
+    if any(token in text for token in ("depth", "nearir", "range_image", "reflec", "signal", "theora")):
+        return 0
+    if "/camera" not in text and "camera" not in text and "image" not in msgtype.lower():
+        return 0
+
+    score = 10
+    if "color" in text or "rgb" in text:
+        score += 30
+    if "image_raw" in text:
+        score += 10
+    if "compressed" in msgtype.lower() or topic.endswith("/compressed"):
+        score += 5
+    return score
+
+
+def _build_camera_frame_preview(
+    *,
+    topic: str,
+    msgtype: str,
+    message,
+    timestamp_ns: int,
+) -> CameraFramePreview | None:
+    try:
+        if msgtype == "sensor_msgs/msg/CompressedImage":
+            data_url, width, height, encoding = _compressed_image_data_url(message)
+        else:
+            data_url, width, height, encoding = _raw_image_data_url(message)
+    except Exception:
+        return None
+
+    return CameraFramePreview(
+        topic=topic,
+        timestamp=_format_ns(timestamp_ns),
+        width=width,
+        height=height,
+        encoding=encoding,
+        data_url=data_url,
+    )
+
+
+def _compressed_image_data_url(message) -> tuple[str, int, int, str]:
+    raw = _message_data_bytes(message)
+    content_type = _compressed_image_content_type(raw, str(getattr(message, "format", "")))
+    width, height = _image_size_from_bytes(raw)
+    data_url = "data:{};base64,{}".format(content_type, base64.b64encode(raw).decode("ascii"))
+    return data_url, width, height, str(getattr(message, "format", "compressed"))
+
+
+def _raw_image_data_url(message) -> tuple[str, int, int, str]:
+    from PIL import Image as PILImage
+    import numpy as np
+
+    width = int(getattr(message, "width", 0) or 0)
+    height = int(getattr(message, "height", 0) or 0)
+    step = int(getattr(message, "step", 0) or 0)
+    encoding = str(getattr(message, "encoding", "") or "").lower()
+    raw_array = np.asarray(getattr(message, "data"), dtype=np.uint8)
+
+    if width <= 0 or height <= 0 or raw_array.size == 0:
+        raise ValueError("empty image")
+
+    channels = _encoding_channels(encoding)
+    if channels <= 0:
+        raise ValueError(f"unsupported image encoding: {encoding}")
+
+    row_size = step if step > 0 else width * channels
+    image_rows = raw_array.reshape(height, row_size)
+    image_data = image_rows[:, : width * channels]
+
+    if channels == 1:
+        image = image_data.reshape(height, width)
+        pil_image = PILImage.fromarray(image, mode="L")
+    else:
+        image = image_data.reshape(height, width, channels)
+        if encoding in {"bgr8", "bgra8"}:
+            image = image[:, :, [2, 1, 0, *([] if channels == 3 else [3])]]
+        mode = "RGB" if channels == 3 else "RGBA"
+        pil_image = PILImage.fromarray(image, mode=mode)
+
+    if pil_image.mode != "RGB":
+        pil_image = pil_image.convert("RGB")
+
+    buffer = BytesIO()
+    pil_image.save(buffer, format="JPEG", quality=78)
+    data_url = "data:image/jpeg;base64,{}".format(base64.b64encode(buffer.getvalue()).decode("ascii"))
+    return data_url, width, height, encoding
+
+
+def _encoding_channels(encoding: str) -> int:
+    normalized = encoding.lower()
+    if normalized in {"rgb8", "bgr8"}:
+        return 3
+    if normalized in {"rgba8", "bgra8"}:
+        return 4
+    if normalized in {"mono8", "8uc1"}:
+        return 1
+    return 0
+
+
+def _message_data_bytes(message) -> bytes:
+    data = getattr(message, "data")
+    if isinstance(data, bytes):
+        return data
+    return bytes(data.tolist() if hasattr(data, "tolist") else data)
+
+
+def _compressed_image_content_type(raw: bytes, image_format: str) -> str:
+    lowered = image_format.lower()
+    if "png" in lowered or raw.startswith(b"\x89PNG"):
+        return "image/png"
+    return "image/jpeg"
+
+
+def _image_size_from_bytes(raw: bytes) -> tuple[int, int]:
+    try:
+        from PIL import Image as PILImage
+
+        with PILImage.open(BytesIO(raw)) as image:
+            return int(image.width), int(image.height)
+    except Exception:
+        return 0, 0
 
 
 def _topic_series_sort_key(series: BagTopicSeries) -> tuple[int, str]:

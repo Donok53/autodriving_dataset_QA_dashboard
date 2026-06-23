@@ -18,6 +18,7 @@ Render에 배포된 서비스는 아래 주소에서 바로 확인할 수 있습
 - camera, lidar, imu, gps, 차량 움직임 명령(cmd_vel)의 동기화 상태를 요약합니다.
 - 급가속, 급제동, GPS jump, 센서 dropout 이벤트를 탐지합니다.
 - ROS bag 파일의 토픽 주기, 메시지 수, 핵심 데이터 스트림 커버리지, timestamp gap을 검사합니다.
+- ROS bag 안의 color camera topic에서 프레임을 추출해 웹 대시보드에 미리보기로 표시합니다.
 - XAI/VLM student 모델 버전과 샘플 설명 결과를 대시보드와 API에서 확인합니다.
 - `/xai/vlm_log` JSON을 요약하여 정상 주행, 안전 정지, 회피, 목적지 도착 이벤트를 집계합니다.
 - GitHub Actions, Docker, Render 배포 흐름을 연결할 수 있는 구조로 개발합니다.
@@ -30,6 +31,7 @@ Render에 배포된 서비스는 아래 주소에서 바로 확인할 수 있습
 - NumPy
 - Scikit-learn
 - Joblib
+- Pillow
 - Pytest
 - Rosbags
 - Docker
@@ -255,6 +257,7 @@ AUTO_ISSUE_MAX_PER_RUNTIME=5
 ### ROS bag 파일
 
 - bag 전체 메시지 수와 주행 시간
+- camera color image topic 프레임 미리보기
 - 토픽별 메시지 수, 추정 주파수, 중앙 주기, 최대 gap
 - camera, lidar, imu, gps, vehicle_motion 계열 토픽 커버리지
 - 핵심 데이터 스트림 누락 여부

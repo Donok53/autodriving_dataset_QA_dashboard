@@ -363,6 +363,49 @@ th {
   line-height: 1.5;
 }
 
+.camera-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.camera-frame {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.camera-frame img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #101827;
+}
+
+.camera-frame figcaption {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.camera-frame figcaption strong,
+.camera-frame figcaption span {
+  overflow-wrap: anywhere;
+}
+
+.camera-frame figcaption strong {
+  color: #344054;
+  font-size: 13px;
+}
+
+.camera-frame figcaption span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .event-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -434,6 +477,7 @@ th {
   .summary-strip,
   .metric-grid,
   .xai-grid,
+  .camera-preview-grid,
   .two-column {
     grid-template-columns: 1fr;
   }

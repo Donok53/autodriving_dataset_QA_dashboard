@@ -63,6 +63,19 @@ class BagTopicProfile:
 
 
 @dataclass(frozen=True)
+class CameraFramePreview:
+    topic: str
+    timestamp: str
+    width: int
+    height: int
+    encoding: str
+    data_url: str
+
+    def to_dict(self) -> dict[str, str | int]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class AnalysisSummary:
     total_rows: int
     duration_seconds: float
@@ -73,6 +86,7 @@ class AnalysisSummary:
     events: list[DrivingEvent]
     source_type: str = "csv"
     topic_profiles: list[BagTopicProfile] | None = None
+    camera_frames: list[CameraFramePreview] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -86,5 +100,8 @@ class AnalysisSummary:
             "events": [event.to_dict() for event in self.events],
             "topic_profiles": [
                 profile.to_dict() for profile in self.topic_profiles or []
+            ],
+            "camera_frames": [
+                frame.to_dict() for frame in self.camera_frames or []
             ],
         }

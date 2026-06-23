@@ -95,6 +95,19 @@ def test_invalid_bag_upload_returns_dashboard_error():
     assert "bag 파일을 읽을 수 없습니다" in response.text
 
 
+def test_bag_upload_renders_camera_preview():
+    with open("data/sample_no_gps_5s.bag", "rb") as file:
+        response = client.post(
+            "/upload",
+            files={"file": ("sample_no_gps_5s.bag", file, "application/octet-stream")},
+        )
+
+    assert response.status_code == 200
+    assert "Bag 카메라 화면" in response.text
+    assert "data:image/jpeg;base64," in response.text
+    assert "/camera/color/image_raw" in response.text
+
+
 def test_async_csv_upload_job_completes_and_renders_result():
     sample_csv = client.get("/api/sample-analysis")
     assert sample_csv.status_code == 200

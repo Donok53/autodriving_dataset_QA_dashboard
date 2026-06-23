@@ -131,6 +131,25 @@
       </section>
 
       {% if has_result %}
+      {% if summary.camera_frames %}
+      <section class="panel">
+        <div class="section-title">
+          <h2>Bag 카메라 화면</h2>
+        </div>
+        <div class="camera-preview-grid">
+          {% for frame in summary.camera_frames %}
+          <figure class="camera-frame">
+            <img src="{{ frame.data_url }}" alt="{{ frame.topic }} camera frame {{ loop.index }}">
+            <figcaption>
+              <strong>{{ frame.topic }}</strong>
+              <span>{{ frame.timestamp }} · {{ frame.width }}x{{ frame.height }} · {{ frame.encoding }}</span>
+            </figcaption>
+          </figure>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
       {% if summary.topic_profiles %}
       <section class="panel" data-paginated data-page-size="10">
         <div class="section-title">
