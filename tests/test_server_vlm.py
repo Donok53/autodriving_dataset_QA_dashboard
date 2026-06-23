@@ -16,16 +16,34 @@ def _summary_with_frames():
                 "encoding": "rgb8",
                 "image_url": f"/camera-frames/job/frame_{index:06d}.jpg",
                 "data_url": "",
+                "xai_overlay": {
+                    "driving_mode_ko": "장애물 회피" if index == 1 else "정상 주행",
+                    "event_label": "avoidance" if index == 1 else "normal_route",
+                    "explanation": "회피 관련 이벤트가 감지되었습니다." if index == 1 else "토픽 흐름을 기반으로 정상 주행 상태입니다.",
+                },
             }
             for index in range(3)
         ],
-        "xai_summary": None,
+        "xai_summary": {
+            "total_explanations": 2,
+            "normal_count": 1,
+            "safety_stop_count": 0,
+            "avoidance_count": 1,
+            "arrival_count": 0,
+            "topics": ["/xai/vlm_log"],
+            "source": "bag_driving_state",
+            "model": {"model_name": "dashboard_topic_xai", "version": "generated-v1"},
+            "representative_explanations": ["토픽 흐름을 기반으로 정상 주행 상태입니다.", "회피 관련 이벤트가 감지되었습니다."],
+        },
     }
 
 
 def test_apply_server_vlm_to_summary_replaces_frames_with_overlay(monkeypatch, tmp_path):
+    seen_overlays = []
+
     class FakeRuntime:
-        def predict_frame(self, *, frame_index, timestamp, source_topic, **_kwargs):
+        def predict_frame(self, *, frame_index, timestamp, source_topic, driving_overlay=None, **_kwargs):
+            seen_overlays.append(driving_overlay)
             record = {
                 "model_name": "xai_student_model",
                 "model_version": "test-v1",
@@ -62,8 +80,11 @@ def test_apply_server_vlm_to_summary_replaces_frames_with_overlay(monkeypatch, t
     assert summary["server_vlm"]["enabled"] is True
     assert summary["server_vlm"]["frame_count"] == 3
     assert summary["xai_summary"]["topics"] == ["/xai/vlm_log"]
-    assert summary["xai_summary"]["source"] == "server_vlm"
-    assert summary["xai_summary"]["model"]["version"] == "test-v1"
+    assert summary["xai_summary"]["source"] == "bag_driving_state"
+    assert summary["xai_summary"]["avoidance_count"] == 1
+    assert summary["server_vlm"]["xai_summary"]["source"] == "server_vlm"
+    assert summary["server_vlm"]["xai_summary"]["model"]["version"] == "test-v1"
+    assert seen_overlays[1]["driving_mode_ko"] == "장애물 회피"
     assert len(written) == 3
     assert summary["camera_frames"][0]["raw_image_url"] == "/camera-frames/job/frame_000000.jpg"
     assert summary["camera_frames"][0]["image_url"] == "/camera-frames/job/server_vlm/vlm_frame_000000.jpg"

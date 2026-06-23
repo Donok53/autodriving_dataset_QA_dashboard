@@ -79,19 +79,19 @@ def apply_server_vlm_to_summary(
     if not records:
         return summary
 
-    xai_summary = analyze_xai_log(records)
-    xai_summary["topics"] = [SERVER_VLM_TOPIC]
-    xai_summary["source_topics"] = sorted({str(frame.get("topic") or "") for frame in frames if frame.get("topic")})
-    xai_summary["source"] = "server_vlm"
+    vlm_summary = analyze_xai_log(records)
+    vlm_summary["topics"] = [SERVER_VLM_TOPIC]
+    vlm_summary["source_topics"] = sorted({str(frame.get("topic") or "") for frame in frames if frame.get("topic")})
+    vlm_summary["source"] = "server_vlm"
 
     summary["camera_frames"] = updated_frames
-    summary["xai_summary"] = xai_summary
     summary["server_vlm"] = {
         "enabled": True,
         "status": "completed",
         "frame_count": len(records),
         "topic": SERVER_VLM_TOPIC,
-        "model": xai_summary.get("model") or {},
+        "model": vlm_summary.get("model") or {},
+        "xai_summary": vlm_summary,
     }
     return summary
 
@@ -130,6 +130,7 @@ def _analyze_frames(
             frame_index=index,
             timestamp=str(source_frame.get("timestamp") or ""),
             source_topic=str(source_frame.get("topic") or ""),
+            driving_overlay=source_frame.get("xai_overlay") if isinstance(source_frame.get("xai_overlay"), dict) else None,
         )
 
         overlay_name = f"vlm_frame_{index:06d}.jpg"
@@ -185,6 +186,7 @@ class CameraOnlyVlmRuntime:
         frame_index: int,
         timestamp: str,
         source_topic: str,
+        driving_overlay: dict[str, Any] | None = None,
     ) -> VlmFrameResult:
         t0 = time.perf_counter()
         motion_summary = summarize_flow(
@@ -224,6 +226,9 @@ class CameraOnlyVlmRuntime:
 
         scene_summary, camera_reason = build_camera_thought(pred_label, row)
         raw_motion, ego_motion, scene_state = describe_motion(row)
+        driving_mode = str((driving_overlay or {}).get("driving_mode_ko") or "카메라 VLM 분석")
+        driving_event_label = str((driving_overlay or {}).get("event_label") or "camera_vlm")
+        driving_reason = str((driving_overlay or {}).get("explanation") or "")
         record = {
             "model_name": str(self.model_info.get("model_name") or "xai_student_model"),
             "model_version": str(self.model_info.get("version") or "unknown"),
@@ -244,7 +249,9 @@ class CameraOnlyVlmRuntime:
             "scene_state_ko": scene_state,
             "motion_summary": motion_summary,
             "scene_summary_ko": scene_summary,
-            "driving_mode_ko": "카메라 VLM 분석",
+            "driving_mode_ko": driving_mode,
+            "driving_event_label": driving_event_label,
+            "driving_event_reason": driving_reason,
             "driving_reason_ko": camera_reason,
             "explanation": camera_reason,
             "event_label": "camera_vlm",
@@ -259,6 +266,7 @@ class CameraOnlyVlmRuntime:
             infer_ms=infer_ms,
             frame_index=int(frame_index),
             top_candidates=top_candidates,
+            driving_overlay=driving_overlay,
         )
         return VlmFrameResult(overlay_bgr=overlay_bgr, record=record)
 
@@ -483,6 +491,7 @@ def render_panel(
     infer_ms: float,
     frame_index: int,
     top_candidates: list[dict[str, Any]],
+    driving_overlay: dict[str, Any] | None = None,
 ) -> np.ndarray:
     h, w = curr_bgr.shape[:2]
     panel_w = 460
@@ -493,6 +502,8 @@ def render_panel(
     row = {"motion_summary": motion_summary}
     scene_summary, camera_reason = build_camera_thought(pred_label, row)
     raw_motion, ego_motion, scene_state = describe_motion(row)
+    driving_mode = str((driving_overlay or {}).get("driving_mode_ko") or "")
+    driving_reason = str((driving_overlay or {}).get("explanation") or "")
 
     pil = PILImage.fromarray(cv2_module.cvtColor(canvas, cv2_module.COLOR_BGR2RGB))
     draw = ImageDraw.Draw(pil)
@@ -506,6 +517,7 @@ def render_panel(
     y += 46
     lines = [
         f"frame: {frame_index}",
+        f"driving: {driving_mode}" if driving_mode else "driving: camera-only",
         f"대표 객체: {pred_label} ({confidence:.2f})",
         f"robot motion: {ego_motion}",
         f"scene state: {scene_state}",
@@ -515,8 +527,10 @@ def render_panel(
         f"reason: {camera_reason}",
         f"infer: {infer_ms:.1f} ms",
     ]
+    if driving_reason:
+        lines.insert(6, f"driving reason: {driving_reason}")
     for idx, line in enumerate(lines):
-        font = body_font if idx < 5 else small_font
+        font = body_font if idx < 6 else small_font
         for subline in wrap_text(line, width=22):
             draw.text((x0, y), subline, fill=(240, 240, 240), font=font)
             y += 28 if font == body_font else 24
