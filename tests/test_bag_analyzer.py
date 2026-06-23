@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.models import DrivingEvent
+from app.models import CameraFramePreview, DrivingEvent
 from app.services.bag_analyzer import (
     BagReadResult,
     BagTopicSeries,
@@ -50,6 +50,16 @@ def test_build_bag_summary_summarizes_xai_records():
             end_time_ns=base + 100_000_000,
             imu_events=[],
             gps_events=[],
+            camera_frames=[
+                CameraFramePreview(
+                    topic="/camera/color/image_raw",
+                    timestamp="2023-11-14T22:13:20.050+00:00",
+                    width=640,
+                    height=480,
+                    encoding="rgb8",
+                    data_url="data:image/jpeg;base64,test",
+                )
+            ],
             xai_records=[
                 {
                     "_topic": "/xai/vlm_log",
@@ -78,6 +88,56 @@ def test_build_bag_summary_summarizes_xai_records():
     assert payload["xai_summary"]["safety_stop_count"] == 1
     assert payload["xai_summary"]["topics"] == ["/xai/vlm_log"]
     assert payload["xai_summary"]["model"]["version"] == "v2"
+    assert payload["camera_frames"][0]["xai_overlay"]["driving_mode_ko"] == "좌측 회피"
+    assert "전방 장애물" in payload["camera_frames"][0]["xai_overlay"]["explanation"]
+
+
+def test_build_bag_summary_generates_xai_log_from_topics_when_missing():
+    base = 1_700_000_000_000_000_000
+    summary = build_bag_summary(
+        BagReadResult(
+            topic_series=[
+                BagTopicSeries(
+                    topic="/camera/color/image_raw",
+                    msgtype="sensor_msgs/msg/Image",
+                    sensor="camera",
+                    message_count=2,
+                    timestamps_ns=[base, base + 100_000_000],
+                ),
+                BagTopicSeries(
+                    topic="/imu/data",
+                    msgtype="sensor_msgs/msg/Imu",
+                    sensor="imu",
+                    message_count=2,
+                    timestamps_ns=[base, base + 100_000_000],
+                ),
+            ],
+            total_message_count=4,
+            processed_message_count=4,
+            start_time_ns=base,
+            end_time_ns=base + 100_000_000,
+            imu_events=[],
+            gps_events=[],
+            camera_frames=[
+                CameraFramePreview(
+                    topic="/camera/color/image_raw",
+                    timestamp="2023-11-14T22:13:20.050+00:00",
+                    width=640,
+                    height=480,
+                    encoding="rgb8",
+                    data_url="data:image/jpeg;base64,test",
+                )
+            ],
+        )
+    )
+
+    payload = summary.to_dict()
+
+    assert payload["xai_summary"]["topics"] == ["/xai/vlm_log"]
+    assert payload["xai_summary"]["model"]["model_name"] == "dashboard_topic_xai"
+    assert payload["xai_summary"]["total_explanations"] >= 1
+    assert payload["camera_frames"][0]["xai_overlay"]["source_topic"]
+    assert payload["camera_frames"][0]["xai_overlay"]["explanation"]
 
 
 def test_build_bag_summary_detects_topic_gap_and_missing_sensor():

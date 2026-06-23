@@ -23,6 +23,10 @@ function initCameraPlayer(player) {
   const status = player.querySelector("[data-camera-status]");
   const topic = player.querySelector("[data-camera-topic]");
   const details = player.querySelector("[data-camera-details]");
+  const xaiOverlay = player.querySelector("[data-camera-xai-overlay]");
+  const xaiMode = player.querySelector("[data-camera-xai-mode]");
+  const xaiTopic = player.querySelector("[data-camera-xai-topic]");
+  const xaiExplanation = player.querySelector("[data-camera-xai-explanation]");
   const frameButtons = Array.from(player.querySelectorAll("[data-camera-frame]"));
 
   let manifestFrames = [];
@@ -37,6 +41,7 @@ function initCameraPlayer(player) {
     topic: frame.topic || "",
     timestamp: frame.timestamp || "",
     meta: `${frame.width || 0}x${frame.height || 0} · ${frame.encoding || ""}`,
+    xaiOverlay: frame.xai_overlay || null,
   })).filter((frame) => frame.src);
 
   if (frames.length === 0) {
@@ -47,6 +52,7 @@ function initCameraPlayer(player) {
         topic: button.dataset.frameTopic || "",
         timestamp: button.dataset.frameTimestamp || "",
         meta: button.dataset.frameMeta || "",
+        xaiOverlay: null,
       });
     });
   }
@@ -78,10 +84,32 @@ function initCameraPlayer(player) {
     if (details) {
       details.textContent = `${frame.timestamp} · ${frame.meta}`;
     }
+    updateXaiOverlay(frame.xaiOverlay);
 
     frameButtons.forEach((button, buttonIndex) => {
       button.classList.toggle("active", thumbnailIndexes[buttonIndex] === currentIndex);
     });
+  }
+
+  function updateXaiOverlay(overlay) {
+    const explanation = overlay?.explanation || "";
+    if (!xaiOverlay || !explanation) {
+      if (xaiOverlay) {
+        xaiOverlay.hidden = true;
+      }
+      return;
+    }
+
+    xaiOverlay.hidden = false;
+    if (xaiMode) {
+      xaiMode.textContent = overlay.driving_mode_ko || overlay.event_label || "XAI";
+    }
+    if (xaiTopic) {
+      xaiTopic.textContent = overlay.source_topic || overlay.timestamp || "";
+    }
+    if (xaiExplanation) {
+      xaiExplanation.textContent = explanation;
+    }
   }
 
   function stopPlayback() {

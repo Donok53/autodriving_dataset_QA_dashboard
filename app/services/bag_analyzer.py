@@ -7,9 +7,9 @@ import math
 import os
 import shutil
 import subprocess
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
@@ -284,6 +284,13 @@ def build_bag_summary(read_result: BagReadResult) -> AnalysisSummary:
     ]
     sync_statuses = _analyze_bag_sync(read_result.topic_series)
     events = [*read_result.imu_events, *read_result.gps_events]
+    xai_records = _prepare_xai_records(
+        read_result=read_result,
+        profiles=profiles,
+        anomalies=anomalies,
+        events=events,
+    )
+    camera_frames = _attach_xai_overlays(read_result.camera_frames, xai_records)
 
     return AnalysisSummary(
         total_rows=read_result.total_message_count,
@@ -295,8 +302,8 @@ def build_bag_summary(read_result: BagReadResult) -> AnalysisSummary:
         events=events,
         source_type="bag",
         topic_profiles=profiles,
-        camera_frames=read_result.camera_frames,
-        xai_summary=_build_xai_summary(read_result.xai_records),
+        camera_frames=camera_frames,
+        xai_summary=_build_xai_summary(xai_records),
     )
 
 
@@ -410,6 +417,205 @@ def _read_xai_log_record(topic: str, message, timestamp_ns: int) -> dict[str, An
     return record
 
 
+def _prepare_xai_records(
+    *,
+    read_result: BagReadResult,
+    profiles: list[BagTopicProfile],
+    anomalies: list[AnomalySegment],
+    events: list[DrivingEvent],
+) -> list[dict[str, Any]]:
+    if read_result.xai_records:
+        return [_normalize_xai_record(record) for record in read_result.xai_records[:MAX_XAI_LOG_RECORDS]]
+
+    return _derive_xai_records_from_bag(
+        profiles=profiles,
+        anomalies=anomalies,
+        events=events,
+        start_time_ns=read_result.start_time_ns,
+    )
+
+
+def _normalize_xai_record(record: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(record)
+    source_topic = str(normalized.get("_topic") or normalized.get("topic") or "bag")
+    normalized["_source_topic"] = source_topic
+    normalized["_topic"] = "/xai/vlm_log"
+    normalized["_timestamp"] = str(
+        normalized.get("_timestamp")
+        or normalized.get("timestamp")
+        or normalized.get("stamp")
+        or ""
+    )
+    event_label = _infer_xai_event_label(normalized)
+    driving_mode = str(normalized.get("driving_mode_ko") or _driving_mode_for_event_label(event_label))
+    explanation = _xai_explanation_text(normalized)
+    if not explanation:
+        explanation = _generate_xai_reason(event_label, driving_mode, source_topic, normalized)
+
+    normalized["event_label"] = event_label
+    normalized["prediction"] = str(normalized.get("prediction") or event_label)
+    normalized["driving_mode_ko"] = driving_mode
+    normalized["driving_reason_ko"] = explanation
+    normalized["explanation"] = explanation
+    return normalized
+
+
+def _derive_xai_records_from_bag(
+    *,
+    profiles: list[BagTopicProfile],
+    anomalies: list[AnomalySegment],
+    events: list[DrivingEvent],
+    start_time_ns: int,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+
+    for event in events:
+        event_label = _event_label_from_driving_event(event)
+        records.append(
+            _generated_xai_record(
+                timestamp=event.timestamp,
+                event_label=event_label,
+                driving_mode=_driving_mode_for_event_label(event_label),
+                explanation=event.description,
+                source_topic=event.event_type,
+            )
+        )
+        if len(records) >= MAX_XAI_LOG_RECORDS:
+            return records
+
+    for anomaly in anomalies:
+        event_label = "safety_stop" if anomaly.severity == "위험" else "blocked"
+        records.append(
+            _generated_xai_record(
+                timestamp=anomaly.start,
+                event_label=event_label,
+                driving_mode=_driving_mode_for_event_label(event_label),
+                explanation=anomaly.description,
+                source_topic=anomaly.category,
+            )
+        )
+        if len(records) >= MAX_XAI_LOG_RECORDS:
+            return records
+
+    if not records:
+        present_sensors = ", ".join(profile.sensor for profile in profiles if profile.sensor != "other") or "sensor"
+        records.append(
+            _generated_xai_record(
+                timestamp=_format_ns(start_time_ns),
+                event_label="normal_route",
+                driving_mode="정상 주행",
+                explanation=f"{present_sensors} 토픽 흐름을 기반으로 정상 주행 상태로 판단했습니다.",
+                source_topic="generated_from_bag_topics",
+            )
+        )
+
+    return records
+
+
+def _generated_xai_record(
+    *,
+    timestamp: str,
+    event_label: str,
+    driving_mode: str,
+    explanation: str,
+    source_topic: str,
+) -> dict[str, Any]:
+    return {
+        "_topic": "/xai/vlm_log",
+        "_source_topic": source_topic,
+        "_timestamp": timestamp,
+        "timestamp": timestamp,
+        "model_name": "dashboard_topic_xai",
+        "model_version": "generated-v1",
+        "event_label": event_label,
+        "prediction": event_label,
+        "driving_mode_ko": driving_mode,
+        "driving_reason_ko": explanation,
+        "explanation": explanation,
+    }
+
+
+def _event_label_from_driving_event(event: DrivingEvent) -> str:
+    text = f"{event.event_type} {event.severity} {event.description}".lower()
+    if any(token in text for token in ("gps", "jump")):
+        return "blocked"
+    if any(token in text for token in ("위험", "급", "acceleration", "brake", "정지", "stop")):
+        return "safety_stop"
+    return "normal_route"
+
+
+def _infer_xai_event_label(record: dict[str, Any]) -> str:
+    for key in ("event_label", "prediction", "event_type", "event", "label", "state", "status", "type", "name"):
+        value = record.get(key)
+        if value:
+            label = _canonical_event_label(str(value))
+            if label != "unknown":
+                return label
+
+    label = _canonical_event_label(" ".join(str(value) for value in record.values()))
+    return "normal_route" if label == "unknown" else label
+
+
+def _canonical_event_label(text: str) -> str:
+    lowered = text.lower()
+    if any(token in lowered for token in ("도착", "arrival", "goal")):
+        return "goal_arrival"
+    if any(token in lowered for token in ("회피", "avoid")):
+        return "avoidance"
+    if any(token in lowered for token in ("차단", "blocked", "block")):
+        return "blocked"
+    if any(token in lowered for token in ("안전모드", "긴급", "정지", "emergency", "stop", "brake")):
+        return "safety_stop"
+    if any(token in lowered for token in ("정상", "normal", "route")):
+        return "normal_route"
+    return "unknown"
+
+
+def _driving_mode_for_event_label(event_label: str) -> str:
+    if event_label == "goal_arrival":
+        return "목적지 도착"
+    if event_label == "avoidance":
+        return "장애물 회피"
+    if event_label == "blocked":
+        return "경로 차단"
+    if event_label == "safety_stop":
+        return "안전모드 정지"
+    return "정상 주행"
+
+
+def _xai_explanation_text(record: dict[str, Any]) -> str:
+    return str(
+        record.get("explanation")
+        or record.get("driving_reason_ko")
+        or record.get("scene_summary_ko")
+        or record.get("reason")
+        or record.get("message")
+        or ""
+    ).strip()
+
+
+def _generate_xai_reason(
+    event_label: str,
+    driving_mode: str,
+    source_topic: str,
+    record: dict[str, Any],
+) -> str:
+    source = source_topic or "bag topic"
+    if event_label == "avoidance":
+        return f"{source} 토픽에서 회피 관련 이벤트가 감지되어 {driving_mode}으로 판단했습니다."
+    if event_label == "safety_stop":
+        return f"{source} 토픽에서 정지 또는 안전 이벤트가 감지되어 {driving_mode}로 판단했습니다."
+    if event_label == "blocked":
+        return f"{source} 토픽에서 경로 차단 또는 센서 이상 신호가 감지되어 {driving_mode}으로 판단했습니다."
+    if event_label == "goal_arrival":
+        return f"{source} 토픽에서 목적지 도착 신호가 감지되어 {driving_mode}으로 판단했습니다."
+
+    raw_hint = str(record.get("data") or record.get("event") or record.get("status") or "").strip()
+    if raw_hint:
+        return f"{source} 토픽 메시지({raw_hint[:80]})를 기반으로 {driving_mode} 상태를 생성했습니다."
+    return f"{source} 토픽 흐름을 기반으로 {driving_mode} 상태를 생성했습니다."
+
+
 def _build_xai_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not records:
         return None
@@ -420,9 +626,69 @@ def _build_xai_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
         return None
 
     summary["topics"] = sorted({str(record.get("_topic")) for record in records if record.get("_topic")})
+    summary["source_topics"] = sorted(
+        {str(record.get("_source_topic")) for record in records if record.get("_source_topic")}
+    )
     summary["first_timestamp"] = records[0].get("_timestamp", "")
     summary["latest_timestamp"] = records[-1].get("_timestamp", "")
     return summary
+
+
+def _attach_xai_overlays(
+    camera_frames: list[CameraFramePreview],
+    xai_records: list[dict[str, Any]],
+) -> list[CameraFramePreview]:
+    if not camera_frames or not xai_records:
+        return camera_frames
+
+    timeline = [
+        (timestamp_ns, record)
+        for record in xai_records
+        if (timestamp_ns := _timestamp_to_ns(str(record.get("_timestamp") or record.get("timestamp") or "")))
+        is not None
+    ]
+    timeline.sort(key=lambda item: item[0])
+    if not timeline:
+        return camera_frames
+
+    timestamps = [timestamp_ns for timestamp_ns, _ in timeline]
+    frames = []
+    for frame in camera_frames:
+        frame_timestamp_ns = _timestamp_to_ns(frame.timestamp)
+        if frame_timestamp_ns is None:
+            frames.append(frame)
+            continue
+
+        record_index = bisect_right(timestamps, frame_timestamp_ns) - 1
+        if record_index < 0:
+            record_index = 0
+        record = timeline[record_index][1]
+        frames.append(replace(frame, xai_overlay=_camera_xai_overlay(record)))
+    return frames
+
+
+def _camera_xai_overlay(record: dict[str, Any]) -> dict[str, object]:
+    return {
+        "timestamp": record.get("_timestamp") or record.get("timestamp") or "",
+        "source_topic": record.get("_source_topic") or record.get("_topic") or "",
+        "driving_mode_ko": record.get("driving_mode_ko") or _driving_mode_for_event_label(
+            str(record.get("event_label") or "")
+        ),
+        "event_label": record.get("event_label") or record.get("prediction") or "",
+        "explanation": record.get("explanation") or record.get("driving_reason_ko") or "",
+    }
+
+
+def _timestamp_to_ns(timestamp: str) -> int | None:
+    if not timestamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp() * 1_000_000_000)
 
 
 def _can_collect_camera_frame(current_count: int, max_camera_frames: int | None) -> bool:

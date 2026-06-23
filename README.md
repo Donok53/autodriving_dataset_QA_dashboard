@@ -200,6 +200,8 @@ bag 파일에 `/student_xai/rich_overlay` 또는 `/student_xai/overlay` 같은 X
 
 비동기 업로드 결과 화면은 선택된 이미지 토픽의 프레임을 `runtime/camera_frames/{job_id}`에 파일로 저장한 뒤 `/camera-frames/{job_id}/...` URL manifest로 재생합니다. 그래서 페이지에 base64 이미지를 모두 넣지 않고도 bag 전체 메시지 범위의 프레임 재생이 가능합니다. 운영 환경에서 프레임 저장량을 제한하려면 `MAX_CAMERA_VIDEO_FRAMES`에 최대 프레임 수를 지정하고, 기본값 `0`은 제한 없음입니다.
 
+bag 안에 `/xai/vlm_log`, `/student_xai/rich_reason`, `/student_xai/camera_reason` 같은 설명 토픽이 있으면 이를 `/xai/vlm_log` 형태로 정규화합니다. 설명 토픽이 없거나 설명 문장이 비어 있으면 센서 이벤트, 이상 구간, 토픽 상태를 기반으로 dashboard generated `/xai/vlm_log`를 만들고, 각 카메라 프레임에 가장 가까운 설명을 영상 위에 overlay합니다.
+
 | 구분 | 링크 |
 | --- | --- |
 | XAI/VLM 학습 및 ROS runtime 저장소 | [Donok53/xai_vlm](https://github.com/Donok53/xai_vlm) |

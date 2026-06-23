@@ -6,7 +6,7 @@
     <title>Autodriving Sensor QA</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="/static/pagination.js?v=2" defer></script>
-    <script src="/static/camera-player.js?v=2" defer></script>
+    <script src="/static/camera-player.js?v=3" defer></script>
     <script src="/static/upload-progress.js?v=6" defer></script>
   </head>
   <body>
@@ -131,8 +131,14 @@
         </div>
         {% if bag_xai_summary and bag_xai_summary.topics %}
         <div class="xai-log-meta">
-          <strong>토픽</strong>
+          <strong>생성 토픽</strong>
           <span>{{ bag_xai_summary.topics | join(', ') }}</span>
+        </div>
+        {% endif %}
+        {% if bag_xai_summary and bag_xai_summary.source_topics %}
+        <div class="xai-log-meta">
+          <strong>생성 기준</strong>
+          <span>{{ bag_xai_summary.source_topics | join(', ') }}</span>
         </div>
         {% endif %}
         <div class="xai-explanations">
@@ -161,6 +167,13 @@
               alt="{{ first_frame.topic }} camera video frame"
               data-camera-player-image
             >
+            <div class="camera-xai-overlay" data-camera-xai-overlay hidden>
+              <div>
+                <strong data-camera-xai-mode></strong>
+                <span data-camera-xai-topic></span>
+              </div>
+              <p data-camera-xai-explanation></p>
+            </div>
           </div>
           <div class="camera-controls">
             <button type="button" data-camera-prev>이전</button>

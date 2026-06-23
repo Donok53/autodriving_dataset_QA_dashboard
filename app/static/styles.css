@@ -390,6 +390,7 @@ th {
 }
 
 .camera-screen {
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -402,6 +403,45 @@ th {
   aspect-ratio: 16 / 9;
   object-fit: contain;
   background: #101827;
+}
+
+.camera-xai-overlay {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(16, 24, 39, 0.84);
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+}
+
+.camera-xai-overlay div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.camera-xai-overlay strong {
+  font-size: 15px;
+}
+
+.camera-xai-overlay span {
+  color: #c5d2e4;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.camera-xai-overlay p {
+  color: #eef4ff;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .camera-controls {

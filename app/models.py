@@ -71,8 +71,9 @@ class CameraFramePreview:
     encoding: str
     data_url: str
     image_url: str | None = None
+    xai_overlay: dict[str, object] | None = None
 
-    def to_dict(self) -> dict[str, str | int | None]:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
