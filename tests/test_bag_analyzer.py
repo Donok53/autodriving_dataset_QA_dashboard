@@ -31,6 +31,55 @@ def test_select_camera_preview_topic_prefers_xai_overlay():
     assert _select_camera_preview_topic(topics) == "/student_xai/rich_overlay"
 
 
+def test_build_bag_summary_summarizes_xai_records():
+    base = 1_700_000_000_000_000_000
+    summary = build_bag_summary(
+        BagReadResult(
+            topic_series=[
+                BagTopicSeries(
+                    topic="/xai/vlm_log",
+                    msgtype="std_msgs/msg/String",
+                    sensor="other",
+                    message_count=2,
+                    timestamps_ns=[base, base + 100_000_000],
+                )
+            ],
+            total_message_count=2,
+            processed_message_count=2,
+            start_time_ns=base,
+            end_time_ns=base + 100_000_000,
+            imu_events=[],
+            gps_events=[],
+            xai_records=[
+                {
+                    "_topic": "/xai/vlm_log",
+                    "_timestamp": "2023-11-14T22:13:20.000+00:00",
+                    "model_name": "xai_student_model",
+                    "model_version": "v2",
+                    "event_label": "avoidance",
+                    "driving_mode_ko": "좌측 회피",
+                    "driving_reason_ko": "전방 장애물을 피해 좌측 회피한다.",
+                },
+                {
+                    "_topic": "/xai/vlm_log",
+                    "_timestamp": "2023-11-14T22:13:20.100+00:00",
+                    "event_label": "safety_stop",
+                    "driving_mode_ko": "안전모드 정지",
+                    "driving_reason_ko": "안전모드가 활성화되어 정지한다.",
+                },
+            ],
+        )
+    )
+
+    payload = summary.to_dict()
+
+    assert payload["xai_summary"]["total_explanations"] == 2
+    assert payload["xai_summary"]["avoidance_count"] == 1
+    assert payload["xai_summary"]["safety_stop_count"] == 1
+    assert payload["xai_summary"]["topics"] == ["/xai/vlm_log"]
+    assert payload["xai_summary"]["model"]["version"] == "v2"
+
+
 def test_build_bag_summary_detects_topic_gap_and_missing_sensor():
     base = 1_700_000_000_000_000_000
     summary = build_bag_summary(

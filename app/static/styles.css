@@ -353,6 +353,27 @@ th {
   margin-top: 14px;
 }
 
+.xai-log-meta {
+  display: grid;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.xai-log-meta strong {
+  color: #344054;
+  font-size: 13px;
+}
+
+.xai-log-meta span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .xai-explanations p {
   padding: 12px 14px;
   border: 1px solid var(--line);

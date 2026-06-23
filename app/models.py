@@ -88,6 +88,7 @@ class AnalysisSummary:
     source_type: str = "csv"
     topic_profiles: list[BagTopicProfile] | None = None
     camera_frames: list[CameraFramePreview] | None = None
+    xai_summary: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -105,4 +106,5 @@ class AnalysisSummary:
             "camera_frames": [
                 frame.to_dict() for frame in self.camera_frames or []
             ],
+            "xai_summary": self.xai_summary,
         }

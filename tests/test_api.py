@@ -66,6 +66,7 @@ def test_dashboard_renders_html():
     assert "데이터 동기화" in response.text
     assert "주행 이벤트" in response.text
     assert "이상 구간" in response.text
+    assert "샘플 XAI 설명 수" in response.text
 
 
 def test_local_dashboard_skips_single_file_upload_limit():
@@ -140,6 +141,54 @@ def test_async_bag_upload_renders_camera_frame_files():
         assert (main_module.CAMERA_FRAME_DIR / job_id / "frame_000000.jpg").exists()
     finally:
         shutil.rmtree(main_module.CAMERA_FRAME_DIR / job_id, ignore_errors=True)
+
+
+def test_job_result_renders_bag_xai_log_summary():
+    job = main_module.create_job("xai_result.bag", "bag")
+    main_module.update_job(
+        job.job_id,
+        status="completed",
+        progress=100,
+        stage="분석 완료",
+        result={
+            "source_type": "bag",
+            "total_rows": 2,
+            "duration_seconds": 0.1,
+            "quality_score": 80,
+            "metrics": [],
+            "sync_statuses": [],
+            "anomalies": [],
+            "events": [],
+            "topic_profiles": [],
+            "camera_frames": [],
+            "xai_summary": {
+                "total_explanations": 2,
+                "normal_count": 0,
+                "safety_stop_count": 1,
+                "avoidance_count": 1,
+                "arrival_count": 0,
+                "model": {
+                    "model_name": "xai_student_model",
+                    "version": "v2",
+                    "run_id": "abc123",
+                },
+                "topics": ["/xai/vlm_log"],
+                "representative_explanations": [
+                    "전방 장애물을 피해 좌측 회피한다.",
+                    "안전모드가 활성화되어 정지한다.",
+                ],
+            },
+        },
+    )
+
+    response = client.get(f"/jobs/{job.job_id}")
+
+    assert response.status_code == 200
+    assert "Bag XAI/VLM 로그" in response.text
+    assert "bag xai_log" in response.text
+    assert "Bag XAI 설명 수" in response.text
+    assert "/xai/vlm_log" in response.text
+    assert "전방 장애물을 피해 좌측 회피한다." in response.text
 
 
 def test_async_csv_upload_job_completes_and_renders_result():

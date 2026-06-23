@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from io import BytesIO
+import json
 import math
 import os
 import shutil
@@ -12,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
+from typing import Any
 
 from rosbags.highlevel import AnyReader
 
@@ -24,6 +26,7 @@ from app.models import (
     QualityMetric,
     SensorSyncStatus,
 )
+from app.services.xai_log_analyzer import InvalidXaiLogError, analyze_xai_log
 
 
 def _read_positive_int_env(name: str, default: int) -> int:
@@ -39,7 +42,9 @@ SENSOR_SORT_ORDER = {sensor: index for index, sensor in enumerate((*EXPECTED_SEN
 MAX_BAG_MESSAGES = 500_000
 MAX_EVENT_COUNT = 30
 MAX_CAMERA_PREVIEW_FRAMES = _read_positive_int_env("MAX_CAMERA_PREVIEW_FRAMES", 60)
+MAX_XAI_LOG_RECORDS = _read_positive_int_env("MAX_XAI_LOG_RECORDS", 10_000)
 XAI_OVERLAY_TOPIC_HINTS = ("student_xai", "rich_overlay", "overlay", "vlm", "/xai")
+XAI_LOG_TOPIC_HINTS = ("xai/vlm_log", "vlm_log", "rich_reason", "camera_reason", "student_xai")
 
 
 class InvalidBagFileError(ValueError):
@@ -65,6 +70,7 @@ class BagReadResult:
     imu_events: list[DrivingEvent]
     gps_events: list[DrivingEvent]
     camera_frames: list[CameraFramePreview] = field(default_factory=list)
+    xai_records: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -138,6 +144,7 @@ def read_bag(
             else int(reader.message_count)
         )
         camera_preview_topic = _select_camera_preview_topic(reader.topics)
+        xai_log_topics = set(_select_xai_log_topics(reader.topics))
         topic_by_name = {
             topic: BagTopicSeries(
                 topic=topic,
@@ -150,14 +157,17 @@ def read_bag(
         imu_events: list[DrivingEvent] = []
         gps_points: list[tuple[int, float, float]] = []
         camera_frames: list[CameraFramePreview] = []
+        xai_records: list[dict[str, Any]] = []
         processed_count = 0
 
         for connection, timestamp, rawdata in reader.messages():
             message = None
             effective_timestamp = int(timestamp)
+            is_xai_log_message = connection.topic in xai_log_topics and len(xai_records) < MAX_XAI_LOG_RECORDS
             should_decode_message = (
                 connection.msgtype.endswith("/Imu")
                 or "NavSatFix" in connection.msgtype
+                or is_xai_log_message
                 or (
                     connection.topic == camera_preview_topic
                     and _can_collect_camera_frame(len(camera_frames), max_camera_frames)
@@ -199,6 +209,11 @@ def read_bag(
                 if frame is not None:
                     camera_frames.append(frame)
 
+            if is_xai_log_message and message is not None:
+                record = _read_xai_log_record(connection.topic, message, effective_timestamp)
+                if record is not None:
+                    xai_records.append(record)
+
             processed_count += 1
             if processed_count == 1 or processed_count % 5000 == 0 or processed_count == total_to_process:
                 percent = 15 + int((processed_count / max(total_to_process, 1)) * 70)
@@ -219,6 +234,7 @@ def read_bag(
             imu_events=imu_events,
             gps_events=_detect_gps_jump_events(gps_points),
             camera_frames=camera_frames,
+            xai_records=xai_records,
         )
 
 
@@ -280,6 +296,7 @@ def build_bag_summary(read_result: BagReadResult) -> AnalysisSummary:
         source_type="bag",
         topic_profiles=profiles,
         camera_frames=read_result.camera_frames,
+        xai_summary=_build_xai_summary(read_result.xai_records),
     )
 
 
@@ -316,6 +333,39 @@ def _select_camera_preview_topic(topics) -> str | None:
     return candidates[0][2]
 
 
+def _select_xai_log_topics(topics) -> list[str]:
+    candidates = []
+    for topic, info in topics.items():
+        msgtype = str(info.msgtype)
+        if not _is_string_msgtype(msgtype):
+            continue
+        score = _xai_log_topic_score(topic)
+        if score <= 0:
+            continue
+        candidates.append((score, int(info.msgcount), topic))
+
+    candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    return [topic for _, _, topic in candidates]
+
+
+def _is_string_msgtype(msgtype: str) -> bool:
+    return msgtype in {"std_msgs/msg/String", "std_msgs/String"} or msgtype.endswith("/String")
+
+
+def _xai_log_topic_score(topic: str) -> int:
+    text = topic.lower()
+    score = 0
+    if any(token in text for token in XAI_LOG_TOPIC_HINTS):
+        score += 50
+    if "xai" in text and any(token in text for token in ("log", "reason")):
+        score += 40
+    if "vlm" in text:
+        score += 20
+    if "reason" in text:
+        score += 10
+    return score
+
+
 def _camera_preview_topic_score(topic: str, msgtype: str) -> int:
     text = f"{topic} {msgtype}".lower()
     if any(token in text for token in ("depth", "nearir", "range_image", "reflec", "signal", "theora")):
@@ -337,6 +387,42 @@ def _camera_preview_topic_score(topic: str, msgtype: str) -> int:
     if "compressed" in msgtype.lower() or topic.endswith("/compressed"):
         score += 5
     return score
+
+
+def _read_xai_log_record(topic: str, message, timestamp_ns: int) -> dict[str, Any] | None:
+    raw = str(getattr(message, "data", "") or "").strip()
+    if not raw:
+        return None
+
+    try:
+        loaded = json.loads(raw)
+    except json.JSONDecodeError:
+        loaded = None
+
+    record: dict[str, Any]
+    if isinstance(loaded, dict):
+        record = loaded
+    else:
+        record = {"data": raw}
+
+    record["_topic"] = topic
+    record["_timestamp"] = _format_ns(timestamp_ns)
+    return record
+
+
+def _build_xai_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not records:
+        return None
+
+    try:
+        summary = analyze_xai_log(records)
+    except InvalidXaiLogError:
+        return None
+
+    summary["topics"] = sorted({str(record.get("_topic")) for record in records if record.get("_topic")})
+    summary["first_timestamp"] = records[0].get("_timestamp", "")
+    summary["latest_timestamp"] = records[-1].get("_timestamp", "")
+    return summary
 
 
 def _can_collect_camera_frame(current_count: int, max_camera_frames: int | None) -> bool:

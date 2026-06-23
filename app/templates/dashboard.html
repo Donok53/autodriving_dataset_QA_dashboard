@@ -89,44 +89,57 @@
         </article>
       </section>
 
+      {% set bag_xai_summary = summary.xai_summary if has_result and summary.xai_summary else none %}
+      {% set displayed_xai_summary = bag_xai_summary or xai_sample_summary %}
+      {% set displayed_xai_model = displayed_xai_summary.model if bag_xai_summary and displayed_xai_summary.model else xai_model_info %}
       <section class="panel xai-panel">
         <div class="section-title">
-          <h2>XAI/VLM 모델 결과</h2>
+          <h2>{% if bag_xai_summary %}Bag XAI/VLM 로그{% else %}XAI/VLM 모델 결과{% endif %}</h2>
+          {% if bag_xai_summary %}
+          <span class="status good">bag xai_log</span>
+          {% else %}
           <span class="status {% if xai_model_info.model_available %}good{% else %}warn{% endif %}">
             {{ xai_model_info.status }}
           </span>
+          {% endif %}
         </div>
         <div class="xai-grid">
           <article class="stat-card">
             <span>현재 모델</span>
-            <strong>{{ xai_model_info.model_name }}</strong>
+            <strong>{{ displayed_xai_model.model_name }}</strong>
           </article>
           <article class="stat-card">
             <span>모델 버전</span>
-            <strong>{{ xai_model_info.version }}</strong>
+            <strong>{{ displayed_xai_model.version }}</strong>
           </article>
           <article class="stat-card">
-            <span>XAI 설명 수</span>
-            <strong>{{ xai_sample_summary.total_explanations }}</strong>
+            <span>{% if bag_xai_summary %}Bag XAI 설명 수{% else %}샘플 XAI 설명 수{% endif %}</span>
+            <strong>{{ displayed_xai_summary.total_explanations }}</strong>
           </article>
           <article class="stat-card">
             <span>안전/정지</span>
-            <strong>{{ xai_sample_summary.safety_stop_count }}</strong>
+            <strong>{{ displayed_xai_summary.safety_stop_count }}</strong>
           </article>
           <article class="stat-card">
             <span>회피</span>
-            <strong>{{ xai_sample_summary.avoidance_count }}</strong>
+            <strong>{{ displayed_xai_summary.avoidance_count }}</strong>
           </article>
           <article class="stat-card">
             <span>목적지 도착</span>
-            <strong>{{ xai_sample_summary.arrival_count }}</strong>
+            <strong>{{ displayed_xai_summary.arrival_count }}</strong>
           </article>
         </div>
+        {% if bag_xai_summary and bag_xai_summary.topics %}
+        <div class="xai-log-meta">
+          <strong>토픽</strong>
+          <span>{{ bag_xai_summary.topics | join(', ') }}</span>
+        </div>
+        {% endif %}
         <div class="xai-explanations">
-          {% for explanation in xai_sample_summary.representative_explanations %}
+          {% for explanation in displayed_xai_summary.representative_explanations %}
           <p>{{ explanation }}</p>
           {% else %}
-          <p class="empty">샘플 XAI 설명이 없습니다.</p>
+          <p class="empty">XAI 설명이 없습니다.</p>
           {% endfor %}
         </div>
       </section>
