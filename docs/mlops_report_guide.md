@@ -71,6 +71,16 @@ local edit -> git commit -> git push -> GitHub Actions -> pytest/Docker build ->
 data/vlm_training_manifest.csv -> scripts/train_vlm_model.py -> MLflow run -> models/candidates/{version}
 ```
 
+보고서용 비교 실험 생성:
+
+```text
+scripts/create_mlflow_comparison_runs.py
+  -> outdoor-rich-v1 baseline import
+  -> outdoor-rich-v2-full / lite / regularized candidate training
+  -> MLflow experiment runs
+  -> MLflow Model Registry versions
+```
+
 모델 등록/반영 흐름:
 
 ```text
@@ -164,7 +174,7 @@ docker compose -f docker-compose.mlflow.yml up
 초기 모델과 신규 모델 비교:
 
 - 초기 모델: `models/current/model_info.json`의 `outdoor-rich-v1`
-- 신규 모델: `scripts/train_vlm_model.py --version outdoor-rich-v2` 실행 후 MLflow metric과 `models/candidates/outdoor-rich-v2/model_info.json` 비교
+- 신규 모델: `scripts/create_mlflow_comparison_runs.py` 실행 후 MLflow에서 `outdoor-rich-v2-full`, `outdoor-rich-v2-lite`, `outdoor-rich-v2-regularized` metric 비교
 
 ## 9. MLflow 기반 실험 관리
 
@@ -185,6 +195,19 @@ pip install -r requirements-mlops.txt
 - metric: accuracy, macro F1, weighted F1, macro precision, macro recall
 - artifact: training manifest, service model bundle, classification report, confusion matrix
 - model: MLflow sklearn classifier
+
+비교 run 생성:
+
+```bash
+python scripts/create_mlflow_comparison_runs.py
+```
+
+캡쳐 대상:
+
+- `xai-vlm-dashboard` experiment에서 여러 run이 나란히 보이는 화면
+- `outdoor-rich-v1` baseline run
+- `outdoor-rich-v2-*` candidate run들의 metric 비교 화면
+- MLflow Models 메뉴의 `xai_student_model` version 목록
 
 가장 좋은 모델 선정 기준:
 

@@ -269,6 +269,14 @@ python .\scripts\train_vlm_model.py --version outdoor-rich-v2
 
 학습 스크립트는 `data/vlm_training_manifest.csv`를 읽어 student VLM 분류 모델을 학습하고, MLflow에 parameter, metric, artifact, sklearn model을 기록합니다. 동시에 서비스 반영용 bundle을 `models/candidates/outdoor-rich-v2`에 저장합니다.
 
+보고서에서 초기 모델과 신규 모델을 비교하려면 아래 명령으로 현재 champion baseline과 여러 candidate run을 한 번에 생성할 수 있습니다.
+
+```bash
+python scripts/create_mlflow_comparison_runs.py
+```
+
+이 명령은 `outdoor-rich-v1` baseline, `outdoor-rich-v2-full`, `outdoor-rich-v2-lite`, `outdoor-rich-v2-regularized` 후보 run을 `xai-vlm-dashboard` experiment에 남기고, MLflow Model Registry의 `xai_student_model`에도 버전을 기록합니다.
+
 기록 항목:
 
 | 구분 | 내용 |
@@ -411,6 +419,7 @@ scripts/
   run_mlflow_server.ps1     Windows MLflow Tracking Server 실행 스크립트
   run_mlflow_server.sh      macOS/Linux/WSL MLflow Tracking Server 실행 스크립트
   train_vlm_model.py        MLflow 기반 student VLM 학습 스크립트
+  create_mlflow_comparison_runs.py  보고서용 baseline/candidate MLflow run 생성
   promote_model.py          candidate 모델을 champion으로 승격
   rollback_model.py         이전 champion 모델로 롤백
 tests/

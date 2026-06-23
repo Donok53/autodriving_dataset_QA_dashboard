@@ -32,6 +32,7 @@ jobs:
           python -m py_compile \
             app/services/model_registry.py \
             scripts/train_vlm_model.py \
+            scripts/create_mlflow_comparison_runs.py \
             scripts/promote_model.py \
             scripts/rollback_model.py
 
