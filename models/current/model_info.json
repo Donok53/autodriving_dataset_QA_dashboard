@@ -1,0 +1,10 @@
+{
+  "model_name": "xai_student_model",
+  "version": "sample-v1",
+  "run_id": "sample-run-v1",
+  "accuracy": 0.87,
+  "macro_f1": 0.83,
+  "promoted_at": "2026-06-23T00:00:00+00:00",
+  "status": "sample",
+  "model_path": "models/current/student_baseline.joblib"
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "frame_index": 12,
+    "stamp": 1716260001.21,
+    "model_name": "xai_student_model",
+    "model_version": "v1",
+    "run_id": "sample-run-v1",
+    "event_label": "normal_route",
+    "prediction": "normal_route",
+    "primary_object_ko": "장애물 없음",
+    "confidence": 0.92,
+    "driving_mode_ko": "정상 경로",
+    "scene_summary_ko": "정상 경로 주행",
+    "driving_reason_ko": "현재 정상 경로를 따라 목적지까지 주행을 진행하고 있다고 본다.",
+    "explanation": "현재 정상 경로를 따라 목적지까지 주행을 진행하고 있다고 본다."
+  },
+  {
+    "frame_index": 28,
+    "stamp": 1716260003.84,
+    "model_name": "xai_student_model",
+    "model_version": "v1",
+    "run_id": "sample-run-v1",
+    "event_label": "avoidance",
+    "prediction": "obstacle_avoidance",
+    "primary_object_ko": "주차콘",
+    "confidence": 0.87,
+    "driving_mode_ko": "좌측 회피",
+    "scene_summary_ko": "좌측 회피 경로 주행",
+    "driving_reason_ko": "전방 장애물을 피해 좌측 회피 경로로 주행을 진행하고 있다고 본다.",
+    "explanation": "전방 장애물을 피해 좌측 회피 경로로 주행을 진행하고 있다고 본다."
+  },
+  {
+    "frame_index": 43,
+    "stamp": 1716260006.02,
+    "model_name": "xai_student_model",
+    "model_version": "v1",
+    "run_id": "sample-run-v1",
+    "event_label": "safety_stop",
+    "prediction": "safety_stop",
+    "primary_object_ko": "사람",
+    "confidence": 0.9,
+    "driving_mode_ko": "안전모드 정지",
+    "scene_summary_ko": "안전모드 정지",
+    "driving_reason_ko": "안전모드가 활성화되어 정지를 우선하는 상태로 본다.",
+    "explanation": "안전모드가 활성화되어 정지를 우선하는 상태로 본다."
+  },
+  {
+    "frame_index": 61,
+    "stamp": 1716260009.45,
+    "model_name": "xai_student_model",
+    "model_version": "v1",
+    "run_id": "sample-run-v1",
+    "event_label": "goal_arrival",
+    "prediction": "goal_arrival",
+    "primary_object_ko": "장애물 없음",
+    "confidence": 0.84,
+    "driving_mode_ko": "목적지 도착",
+    "scene_summary_ko": "목적지 도착",
+    "driving_reason_ko": "목적지에 도착해 정지한 상태로 본다.",
+    "explanation": "목적지에 도착해 정지한 상태로 본다."
+  }
+]

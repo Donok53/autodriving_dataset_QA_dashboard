@@ -19,5 +19,6 @@ runtime/
 data/no_gps.bag
 data/no_vehicle_motion.bag
 data/*.tmp.bag
+models/current/*.joblib
 
 .DS_Store
