@@ -599,6 +599,7 @@ def _run_analysis_job(job_id: str, temp_path: Path, suffix: str) -> None:
                 shutil.rmtree(frame_dir, ignore_errors=True)
             summary = analyze_bag(
                 temp_path,
+                max_messages=None,
                 allow_reindex=True,
                 progress_callback=lambda progress, stage: update_job(
                     job_id,

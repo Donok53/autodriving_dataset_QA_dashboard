@@ -81,7 +81,7 @@ ProgressCallback = Callable[[int, str], None]
 
 def analyze_bag(
     path: Path,
-    max_messages: int = MAX_BAG_MESSAGES,
+    max_messages: int | None = MAX_BAG_MESSAGES,
     progress_callback: ProgressCallback | None = None,
     allow_reindex: bool = False,
     camera_frame_dir: Path | None = None,
@@ -125,14 +125,18 @@ def analyze_bag(
 
 def read_bag(
     path: Path,
-    max_messages: int = MAX_BAG_MESSAGES,
+    max_messages: int | None = MAX_BAG_MESSAGES,
     progress_callback: ProgressCallback | None = None,
     camera_frame_dir: Path | None = None,
     camera_frame_url_prefix: str | None = None,
     max_camera_frames: int | None = MAX_CAMERA_PREVIEW_FRAMES,
 ) -> BagReadResult:
     with AnyReader([path]) as reader:
-        total_to_process = min(int(reader.message_count), max_messages)
+        total_to_process = (
+            min(int(reader.message_count), max_messages)
+            if max_messages is not None
+            else int(reader.message_count)
+        )
         camera_preview_topic = _select_camera_preview_topic(reader.topics)
         topic_by_name = {
             topic: BagTopicSeries(
@@ -203,7 +207,7 @@ def read_bag(
                     percent,
                     f"bag 메시지 분석 중 ({processed_count:,}/{total_to_process:,})",
                 )
-            if processed_count >= max_messages:
+            if max_messages is not None and processed_count >= max_messages:
                 break
 
         return BagReadResult(

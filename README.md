@@ -198,7 +198,7 @@ XAI/VLM student 모델의 학습 코드, ROS runtime, overlay 생성 기능은 �
 
 bag 파일에 `/student_xai/rich_overlay` 또는 `/student_xai/overlay` 같은 XAI/VLM overlay 이미지 토픽이 포함되어 있으면 대시보드는 해당 토픽을 우선 선택해 카메라 영상 플레이어로 보여줍니다. overlay 토픽이 없을 때는 `/camera/color/image_raw` 같은 일반 color camera 토픽을 사용합니다.
 
-비동기 업로드 결과 화면은 선택된 이미지 토픽의 프레임을 `runtime/camera_frames/{job_id}`에 파일로 저장한 뒤 `/camera-frames/{job_id}/...` URL manifest로 재생합니다. 그래서 페이지에 base64 이미지를 모두 넣지 않고도 전체 프레임 재생이 가능합니다. 운영 환경에서 프레임 저장량을 제한하려면 `MAX_CAMERA_VIDEO_FRAMES`에 최대 프레임 수를 지정하고, 기본값 `0`은 제한 없음입니다.
+비동기 업로드 결과 화면은 선택된 이미지 토픽의 프레임을 `runtime/camera_frames/{job_id}`에 파일로 저장한 뒤 `/camera-frames/{job_id}/...` URL manifest로 재생합니다. 그래서 페이지에 base64 이미지를 모두 넣지 않고도 bag 전체 메시지 범위의 프레임 재생이 가능합니다. 운영 환경에서 프레임 저장량을 제한하려면 `MAX_CAMERA_VIDEO_FRAMES`에 최대 프레임 수를 지정하고, 기본값 `0`은 제한 없음입니다.
 
 | 구분 | 링크 |
 | --- | --- |
